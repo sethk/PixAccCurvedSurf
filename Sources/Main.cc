@@ -237,6 +237,11 @@ public:
 			cameraParams[1]+= delta.y;
 			ImGui::ResetMouseDragDelta(0);
 		}
+		while (cameraParams[0] < -180)
+			cameraParams[0]+= 360;
+		while (cameraParams[0] >= 180)
+			cameraParams[0]-= 360;
+		cameraParams[1] = glm::clamp(cameraParams[1], -90.0f, 90.0f);
 
         mat4 modelViewMatrix(1);
         modelViewMatrix = glm::translate(modelViewMatrix, -vec3(0, 0, distance));
