@@ -30,7 +30,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLint modelViewMatrixLocation;
     GLint projectionMatrixLocation;
     bool showControlPoints = true;
-    bool showBoundingHulls = true;
+    bool showControlMeshes = true;
     GLint patchRange[2] = {5, 1};
 
     void
@@ -85,6 +85,18 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         return location;
     }
 
+	void
+	RenderDebugPrimitives(GLenum type, GLfloat r, GLfloat g, GLfloat b, const vector<GLuint> &indices)
+	{
+		GLint colorLocation = GetUniformLocation("Color");
+		glUniform4f(colorLocation, r, g, b, 1);
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STREAM_DRAW);
+
+		glDrawElements(type, indices.size(), GL_UNSIGNED_INT, 0);
+	}
+
     void
     RenderDebug(void)
     {
@@ -97,43 +109,50 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         glEnableVertexAttribArray(positionLocation);
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-        glPointSize(5);
+
+        if (showControlMeshes)
+		{
+			vector<GLuint> indices;
+
+			for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+			{
+				for (GLuint j = 0; j < 4; ++j)
+				{
+					for (GLuint k = 0; k < 3; ++k)
+					{
+						indices.push_back(TeapotIndices[i][j][k]);
+						indices.push_back(TeapotIndices[i][j][k + 1]);
+						indices.push_back(TeapotIndices[i][k][j]);
+						indices.push_back(TeapotIndices[i][k + 1][j]);
+					}
+				}
+			}
+
+			RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
+		}
+
         if (showControlPoints)
-            glDrawElements(GL_POINTS,
-                           patchRange[1] * NumTeapotVerticesPerPatch,
-                           GL_UNSIGNED_INT,
-                           (void *)(uintptr_t)(patchRange[0] * NumTeapotVerticesPerPatch));
+		{
+			vector<GLuint> anchorIndices;
+			vector<GLuint> controlIndices;
 
-        vector<GLuint> debugIndices;
-        for (GLuint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
-        {
-            for (GLuint j = 0; j < 4; ++j)
-            {
-                debugIndices.push_back(TeapotIndices[i][j][0]);
-                debugIndices.push_back(TeapotIndices[i][j][1]);
-                debugIndices.push_back(TeapotIndices[i][j][1]);
-                debugIndices.push_back(TeapotIndices[i][j][2]);
-                debugIndices.push_back(TeapotIndices[i][j][2]);
-                debugIndices.push_back(TeapotIndices[i][j][3]);
-                debugIndices.push_back(TeapotIndices[i][j][3]);
-                debugIndices.push_back(TeapotIndices[i][j][0]);
+			for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+			{
+				for (GLuint j = 0; j < 4; ++j)
+					for (GLuint k = 0; k < 4; ++k)
+					{
+						if ((j == 0 || j == 3) && (k == 0 || k == 3))
+							anchorIndices.push_back(TeapotIndices[i][j][k]);
+						else
+							controlIndices.push_back(TeapotIndices[i][j][k]);
+					}
+			}
 
-                debugIndices.push_back(TeapotIndices[i][0][j]);
-                debugIndices.push_back(TeapotIndices[i][1][j]);
-                debugIndices.push_back(TeapotIndices[i][1][j]);
-                debugIndices.push_back(TeapotIndices[i][2][j]);
-                debugIndices.push_back(TeapotIndices[i][2][j]);
-                debugIndices.push_back(TeapotIndices[i][3][j]);
-                debugIndices.push_back(TeapotIndices[i][3][j]);
-                debugIndices.push_back(TeapotIndices[i][0][j]);
-            }
-        }
+			glPointSize(5);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, debugIndices.size(), debugIndices.data(), GL_STREAM_DRAW);
-
-        if (showBoundingHulls)
-            glDrawElements(GL_LINES, debugIndices.size(), GL_UNSIGNED_INT, 0);
+			RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
+			RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
+		}
 
         CheckGLErrors("RenderDebug()");
     }
@@ -169,14 +188,10 @@ public:
 
         glUseProgram(program);
 
-        GLint positionLocation = GetAttribLocation("Position");
-        glEnableVertexAttribArray(positionLocation);
-        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
         projectionMatrixLocation = GetUniformLocation("ProjectionMatrix");
         modelViewMatrixLocation = GetUniformLocation("ModelViewMatrix");
 
-        glClearColor(0.4, 0.4, 0.4, 1);
+        glClearColor(0, 0, 0, 1);
 
         CheckGLErrors("PixAccCurvedSurf()");
     }
@@ -184,7 +199,7 @@ public:
     virtual void
     Render(double /*time*/)
     {
-        ImWindow gui("Controls");
+        ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -192,13 +207,13 @@ public:
         if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
-            if (ImGui::DragInt2("Draw patches", patchRange, 1, 0, NumTeapotPatches))
+            if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
             {
                 patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches);
                 patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
             }
             ImGui::Checkbox("Show control points", &showControlPoints);
-            ImGui::Checkbox("Show bounding hulls", &showBoundingHulls);
+            ImGui::Checkbox("Show control meshes", &showControlMeshes);
         }
 
         static float distance = 5;
@@ -214,11 +229,20 @@ public:
                 ImGui::DragFloat("FOV", &fov, 1, 30, 120);
         }
 
+		ImGuiIO &io = ImGui::GetIO();
+		if (!io.WantCaptureMouse && ImGui::IsMouseDown(0))
+		{
+			ImVec2 delta = ImGui::GetMouseDragDelta(0, 0);
+			cameraParams[0]+= delta.x;
+			cameraParams[1]+= delta.y;
+			ImGui::ResetMouseDragDelta(0);
+		}
+
         mat4 modelViewMatrix(1);
-        modelViewMatrix = glm::translate(modelViewMatrix, -modelCentroid);
-        modelViewMatrix = glm::translate(modelViewMatrix, modelPos - vec3(0, 0, distance));
+        modelViewMatrix = glm::translate(modelViewMatrix, -vec3(0, 0, distance));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[1]), vec3(1, 0, 0));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[0]), vec3(0, 1, 0));
+        modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
         glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelViewMatrix));
 
         int width, height;
