@@ -202,8 +202,10 @@ public:
 
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-		//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		#ifdef __APPLE__
+			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+			glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		#endif // __APPLE__
 	}
 
 	~GLFWApp() { glfwTerminate(); }
@@ -298,7 +300,11 @@ public:
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImGui_ImplGlfw_InitForOpenGL(win, useImGuiInput);
-		ImGui_ImplOpenGL3_Init("#version 130");
+		#ifdef __APPLE__
+			ImGui_ImplOpenGL3_Init("#version 410 core");
+		#else
+			ImGui_ImplOpenGL3_Init("#version 130");
+		#endif // __APPLE__
 
 		ImGui::StyleColorsLight(); // {Light,Dark,Classic}
 	}
