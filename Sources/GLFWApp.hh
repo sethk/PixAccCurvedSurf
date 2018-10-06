@@ -215,7 +215,7 @@ public:
 	    while ((error = glGetError()) != GL_NO_ERROR)
 		{
 	        std::ostringstream oss;
-	        oss << "GL error during " << desc << ' ' << error;
+	        oss << "GL error during " << desc << ' ' << (void *)(uintptr_t)error;
 	        throw std::runtime_error(oss.str());
 		}
 	}

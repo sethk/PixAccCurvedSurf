@@ -2,6 +2,7 @@
 #include "../Data/Teapot.h"
 #include <istream>
 #include <fstream>
+#include <vector>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -13,18 +14,24 @@ using std::ifstream;
 using std::ostringstream;
 using std::clog;
 using std::endl;
+using std::vector;
 using glm::vec3;
 using glm::mat4;
 using glm::value_ptr;
 
 class PixAccCurvedSurf : public GLFWWindowedApp
 {
-    enum {BUFFER_ARRAY, BUFFER_ELEMENTS, NUM_BUFFERS};
+    enum {VERTEX_ARRAY_TEAPOT, VERTEX_ARRAY_DEBUG, NUM_VERTEX_ARRAYS};
+    GLuint vertexArrayObjects[NUM_VERTEX_ARRAYS];
+    enum {BUFFER_CONTROL_POINTS, BUFFER_CONTROL_POINT_INDICES, BUFFER_DEBUG_INDICES, NUM_BUFFERS};
     GLuint buffers[NUM_BUFFERS];
     GLuint program;
     vec3 modelCentroid;
     GLint modelViewMatrixLocation;
     GLint projectionMatrixLocation;
+    bool showControlPoints = true;
+    bool showBoundingHulls = true;
+    GLint patchRange[2] = {5, 1};
 
     void
     LoadShader(GLenum type, const string &path)
@@ -78,16 +85,68 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         return location;
     }
 
+    void
+    RenderDebug(void)
+    {
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+
+        GLint positionLocation = GetAttribLocation("Position");
+        glEnableVertexAttribArray(positionLocation);
+        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        glPointSize(5);
+        if (showControlPoints)
+            glDrawElements(GL_POINTS,
+                           patchRange[1] * NumTeapotVerticesPerPatch,
+                           GL_UNSIGNED_INT,
+                           (void *)(uintptr_t)(patchRange[0] * NumTeapotVerticesPerPatch));
+
+        vector<GLuint> debugIndices;
+        for (GLuint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+        {
+            for (GLuint j = 0; j < 4; ++j)
+            {
+                debugIndices.push_back(TeapotIndices[i][j][0]);
+                debugIndices.push_back(TeapotIndices[i][j][1]);
+                debugIndices.push_back(TeapotIndices[i][j][1]);
+                debugIndices.push_back(TeapotIndices[i][j][2]);
+                debugIndices.push_back(TeapotIndices[i][j][2]);
+                debugIndices.push_back(TeapotIndices[i][j][3]);
+                debugIndices.push_back(TeapotIndices[i][j][3]);
+                debugIndices.push_back(TeapotIndices[i][j][0]);
+
+                debugIndices.push_back(TeapotIndices[i][0][j]);
+                debugIndices.push_back(TeapotIndices[i][1][j]);
+                debugIndices.push_back(TeapotIndices[i][1][j]);
+                debugIndices.push_back(TeapotIndices[i][2][j]);
+                debugIndices.push_back(TeapotIndices[i][2][j]);
+                debugIndices.push_back(TeapotIndices[i][3][j]);
+                debugIndices.push_back(TeapotIndices[i][3][j]);
+                debugIndices.push_back(TeapotIndices[i][0][j]);
+            }
+        }
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, debugIndices.size(), debugIndices.data(), GL_STREAM_DRAW);
+
+        if (showBoundingHulls)
+            glDrawElements(GL_LINES, debugIndices.size(), GL_UNSIGNED_INT, 0);
+
+        CheckGLErrors("RenderDebug()");
+    }
+
 public:
     PixAccCurvedSurf() : GLFWWindowedApp("PixAccCurvedSurf")
     {
-        GLuint vertexArrayObject;
-        glGenVertexArrays(1, &vertexArrayObject);
-        glBindVertexArray(vertexArrayObject);
+        glGenVertexArrays(NUM_VERTEX_ARRAYS, vertexArrayObjects);
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
         glGenBuffers(NUM_BUFFERS, buffers);
 
-        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_ARRAY]);
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
         glBufferData(GL_ARRAY_BUFFER, sizeof(TeapotVertices), TeapotVertices, GL_STATIC_DRAW);
 
         modelCentroid = vec3(0);
@@ -95,7 +154,7 @@ public:
             modelCentroid+= vec3(TeapotVertices[i][0], TeapotVertices[i][1], TeapotVertices[i][2]);
         modelCentroid/= NumTeapotVertices;
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_ELEMENTS]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
 
         glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
@@ -133,9 +192,16 @@ public:
         if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
+            if (ImGui::DragInt2("Draw patches", patchRange, 1, 0, NumTeapotPatches))
+            {
+                patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches);
+                patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
+            }
+            ImGui::Checkbox("Show control points", &showControlPoints);
+            ImGui::Checkbox("Show bounding hulls", &showBoundingHulls);
         }
 
-        static float distance = 1;
+        static float distance = 5;
         static float cameraParams[2];
         static bool perspective = true;
         static float fov = 70;
@@ -149,7 +215,7 @@ public:
         }
 
         mat4 modelViewMatrix(1);
-        //modelViewMatrix = glm::translate(modelViewMatrix, modelCentroid);
+        modelViewMatrix = glm::translate(modelViewMatrix, -modelCentroid);
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - vec3(0, 0, distance));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[1]), vec3(1, 0, 0));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[0]), vec3(0, 1, 0));
@@ -164,8 +230,7 @@ public:
             projectionMatrix = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f);
         glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projectionMatrix));
 
-        glPointSize(5);
-        glDrawElements(GL_POINTS, NumTeapotVertices, GL_UNSIGNED_INT, 0);
+        RenderDebug();
 
         CheckGLErrors("Render()");
     }

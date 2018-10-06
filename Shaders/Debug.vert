@@ -3,6 +3,7 @@ uniform mat4 ModelViewMatrix;
 uniform mat4 ProjectionMatrix;
 
 in vec3 Position;
+in vec4 Color;
 
 out gl_PerVertex
 {
@@ -12,5 +13,5 @@ out gl_PerVertex
 void
 main(void)
 {
-    gl_Position = ProjectionMatrix * ModelViewMatrix * vec4(Position * 0.2, 1);
+    gl_Position = ProjectionMatrix * ModelViewMatrix * vec4(Position, 1);
 }
