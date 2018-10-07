@@ -28,7 +28,7 @@ struct Slefe
     enum {LOWER, UPPER, NUM_BOUNDS};
     struct Bounds
     {
-        REAL points[numSlefeDivs][numSlefeDivs][threeD];
+        REAL points[numSlefeDivs + 1][numSlefeDivs + 1][threeD];
     } bounds[NUM_BOUNDS];
 };
 
@@ -240,7 +240,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
             glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		    glBufferData(GL_ARRAY_BUFFER, slefes.size() * sizeof(slefes[0]), slefes.data(), GL_STREAM_DRAW);
 
-		    // Needed?
             glEnableVertexAttribArray(positionLocation);
             glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
@@ -319,7 +318,7 @@ public:
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::DragFloat("Distance", &distance, 0.01, 0.01, 10.0);
-            ImGui::DragFloat2("Azi./Elev.", cameraParams, 1, -180, 180, "%.0f deg");
+            ImGui::DragFloat2("Azi./Elev.", cameraParams, 1, -179, 180, "%.0f deg");
             ImGui::Checkbox("Perspective", &perspective);
             if (perspective)
                 ImGui::DragFloat("FOV", &fov, 1, 30, 120);
@@ -333,9 +332,9 @@ public:
 			cameraParams[1]+= delta.y;
 			ImGui::ResetMouseDragDelta(0);
 		}
-		while (cameraParams[0] < -180)
+		while (cameraParams[0] <= -180)
 			cameraParams[0]+= 360;
-		while (cameraParams[0] >= 180)
+		while (cameraParams[0] > 180)
 			cameraParams[0]-= 360;
 		cameraParams[1] = glm::clamp(cameraParams[1], -90.0f, 90.0f);
 
