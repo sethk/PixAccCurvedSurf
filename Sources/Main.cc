@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <SubLiME.h>
 
 using std::runtime_error;
 using std::array;
@@ -19,11 +20,30 @@ using glm::vec3;
 using glm::mat4;
 using glm::value_ptr;
 
+static const GLuint threeD = 3;
+static const GLuint numSlefeDivs = 3;
+
+struct Slefe
+{
+    enum {LOWER, UPPER, NUM_BOUNDS};
+    struct Bounds
+    {
+        REAL points[numSlefeDivs][numSlefeDivs][threeD];
+    } bounds[NUM_BOUNDS];
+};
+
 class PixAccCurvedSurf : public GLFWWindowedApp
 {
     enum {VERTEX_ARRAY_TEAPOT, VERTEX_ARRAY_DEBUG, NUM_VERTEX_ARRAYS};
     GLuint vertexArrayObjects[NUM_VERTEX_ARRAYS];
-    enum {BUFFER_CONTROL_POINTS, BUFFER_CONTROL_POINT_INDICES, BUFFER_DEBUG_INDICES, NUM_BUFFERS};
+    enum
+    {
+        BUFFER_CONTROL_POINTS,
+        BUFFER_CONTROL_POINT_INDICES,
+        BUFFER_DEBUG_VERTICES,
+        BUFFER_DEBUG_INDICES,
+        NUM_BUFFERS
+    };
     GLuint buffers[NUM_BUFFERS];
     GLuint program;
     vec3 modelCentroid;
@@ -31,6 +51,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLint projectionMatrixLocation;
     bool showControlPoints = true;
     bool showControlMeshes = true;
+    bool showSlefeTiles = true;
     GLint patchRange[2] = {5, 1};
 
     void
@@ -109,7 +130,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         glEnableVertexAttribArray(positionLocation);
         glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-
         if (showControlMeshes)
 		{
 			vector<GLuint> indices;
@@ -154,6 +174,79 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
 		}
 
+		if (showSlefeTiles)
+        {
+		    ImTreeNode rootNode("Patch slefes");
+
+		    vector<Slefe> slefes(patchRange[1]);
+		    vector<GLuint> slefeIndices;
+
+		    for (GLint patchOffset = 0; patchOffset < patchRange[1]; ++patchOffset)
+            {
+                struct Slefe &slefe = slefes[patchOffset];
+		        GLuint patchIndex = patchRange[0] + patchOffset;
+
+		        REAL coeff[4][4][3];
+		        for (GLuint u = 0; u < 4; ++u)
+		            for (GLuint v = 0; v < 4; ++v)
+		            {
+		                const float *vertex = TeapotVertices[TeapotIndices[patchIndex][u][v]];
+                        for (GLuint dim = 0; dim < 3; ++dim)
+                            coeff[u][v][dim] = vertex[dim];
+                    }
+
+                for (GLuint dim = 0; dim < 3; ++dim)
+                    tpSlefe(coeff[0][0] + dim, 4 * 3, 3,
+                            3, 3, numSlefeDivs, numSlefeDivs,
+                            slefe.bounds[Slefe::LOWER].points[0][0] + dim,
+                            slefe.bounds[Slefe::UPPER].points[0][0] + dim,
+                            numSlefeDivs * 3, 3);
+
+                REAL *pointsBase = slefes[0].bounds[0].points[0][0];
+
+                bool showPatch;
+                if (rootNode)
+                    showPatch = ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str());
+                else
+                    showPatch = false;
+
+                for (GLuint whichBound = 0; whichBound < Slefe::NUM_BOUNDS; ++whichBound)
+                {
+                    struct Slefe::Bounds &bounds = slefe.bounds[whichBound];
+                    for (GLuint udiv = 0; udiv < numSlefeDivs; ++udiv)
+                    {
+                        for (GLuint vdiv = 0; vdiv < numSlefeDivs; ++vdiv)
+                        {
+                            if (showPatch)
+                                ImGui::Text("%s[%u][%u]: %f, %f, %f",
+                                            (whichBound == Slefe::LOWER) ? "Lower" : "Upper", udiv, vdiv,
+                                            bounds.points[udiv][vdiv][0],
+                                            bounds.points[udiv][vdiv][1],
+                                            bounds.points[udiv][vdiv][2]);
+                        }
+
+                        if (udiv < numSlefeDivs - 1)
+                        {
+                            slefeIndices.push_back((bounds.points[udiv][0] - pointsBase) / 3);
+                            slefeIndices.push_back((bounds.points[udiv + 1][0] - pointsBase) / 3);
+                        }
+                    }
+                }
+
+                if (showPatch)
+                    ImGui::TreePop();
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
+		    glBufferData(GL_ARRAY_BUFFER, slefes.size() * sizeof(slefes[0]), slefes.data(), GL_STREAM_DRAW);
+
+		    // Needed?
+            glEnableVertexAttribArray(positionLocation);
+            glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+            RenderDebugPrimitives(GL_POINTS, 0, 1, 1, slefeIndices);
+        }
+
         CheckGLErrors("RenderDebug()");
     }
 
@@ -193,6 +286,9 @@ public:
 
         glClearColor(0, 0, 0, 1);
 
+        setenv("SUBLIMEPATH", ".", false);
+        InitBounds();
+
         CheckGLErrors("PixAccCurvedSurf()");
     }
 
@@ -209,7 +305,7 @@ public:
             ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
             if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
             {
-                patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches);
+                patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);
                 patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
             }
             ImGui::Checkbox("Show control points", &showControlPoints);
@@ -258,6 +354,11 @@ public:
         else
             projectionMatrix = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f);
         glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projectionMatrix));
+
+        if (ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
+        }
 
         RenderDebug();
 

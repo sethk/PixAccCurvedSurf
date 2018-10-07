@@ -28,6 +28,12 @@ target_sources(${PROJECT_NAME} PRIVATE
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${IMGUI_DIR} ${IMGUI_DIR}/examples ${IMGUI_DIR}/misc/raii ${IMGUI_DIR}/misc/stl)
 
+set(SUBLIME_DIR ThirdParty/SubLiME)
+target_include_directories(${PROJECT_NAME} PRIVATE ${SUBLIME_DIR})
+target_sources(${PROJECT_NAME} PRIVATE ${SUBLIME_DIR}/bspSlefe.c ${SUBLIME_DIR}/tpSlefe.c ${SUBLIME_DIR}/uniSlefe.c)
+file(MAKE_DIRECTORY range)
+file(COPY ${SUBLIME_DIR}/range/unirange-3_3.asc DESTINATION range/unirange-3_3.asc)
+
 find_package(glfw3 3 CONFIG REQUIRED)
 if(${GLFW_STATIC})
     target_include_directories(${PROJECT_NAME} PRIVATE ${GLFW_STATIC_INCLUDE_DIRS})
