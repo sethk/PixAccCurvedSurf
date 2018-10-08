@@ -357,13 +357,13 @@ public:
 
         glClear(GL_COLOR_BUFFER_BIT);
 
-        static float distance = 5;
+		static vec3 cameraOffset(0, 0, 5);
         static float cameraParams[2];
         static bool perspective = true;
         static float fov = 70;
         if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::DragFloat("Distance", &distance, 0.01, 0.01, 10.0);
+			ImGui::DragFloat3("X/Y/Z Offset", value_ptr(cameraOffset), -0.01, -10, 10.0);
             ImGui::DragFloat2("Azi./Elev.", cameraParams, 1, -179, 180, "%.0f deg");
             ImGui::Checkbox("Perspective", &perspective);
             if (perspective)
@@ -371,12 +371,24 @@ public:
         }
 
 		ImGuiIO &io = ImGui::GetIO();
-		if (!io.WantCaptureMouse && ImGui::IsMouseDown(0))
+		if (!io.WantCaptureMouse)
 		{
-			ImVec2 delta = ImGui::GetMouseDragDelta(0, 0);
-			cameraParams[0]+= delta.x;
-			cameraParams[1]+= delta.y;
-			ImGui::ResetMouseDragDelta(0);
+			if (ImGui::IsMouseDown(0))
+			{
+				ImVec2 delta = ImGui::GetMouseDragDelta(0, 0);
+				cameraParams[0]+= delta.x;
+				cameraParams[1]+= delta.y;
+				ImGui::ResetMouseDragDelta(0);
+			}
+			else if (ImGui::IsMouseDown(1))
+			{
+				ImVec2 delta = ImGui::GetMouseDragDelta(1, 0);
+				cameraOffset[0]-= delta.x / 50.0;
+				cameraOffset[1]+= delta.y / 50.0;
+				ImGui::ResetMouseDragDelta(1);
+			}
+
+			cameraOffset[2]+= io.MouseWheel;
 		}
 		while (cameraParams[0] <= -180)
 			cameraParams[0]+= 360;
@@ -385,7 +397,7 @@ public:
 		cameraParams[1] = glm::clamp(cameraParams[1], -90.0f, 90.0f);
 
         mat4 modelViewMatrix(1);
-        modelViewMatrix = glm::translate(modelViewMatrix, -vec3(0, 0, distance));
+        modelViewMatrix = glm::translate(modelViewMatrix, -cameraOffset);
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[1]), vec3(1, 0, 0));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[0]), vec3(0, 1, 0));
 
