@@ -107,6 +107,18 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     }
 
 	void
+	BindTeapotVertices()
+	{
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+
+        GLint positionLocation = GetAttribLocation("Position");
+        glEnableVertexAttribArray(positionLocation);
+        glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
+	}
+
+	void
 	RenderDebugPrimitives(GLenum type, GLfloat r, GLfloat g, GLfloat b, const vector<GLuint> &indices)
 	{
 		GLint colorLocation = GetUniformLocation("Color");
@@ -116,19 +128,60 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STREAM_DRAW);
 
 		glDrawElements(type, indices.size(), GL_UNSIGNED_INT, 0);
+
+        CheckGLErrors("RenderDebugPrimitives()");
 	}
 
-    void
-    RenderDebug(void)
-    {
-        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+	void
+	RenderControlPoints(bool showPatches)
+	{
+		BindTeapotVertices();
 
-        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+		vector<GLuint> anchorIndices;
+		vector<GLuint> controlIndices;
 
-        GLint positionLocation = GetAttribLocation("Position");
-        glEnableVertexAttribArray(positionLocation);
-        glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		bool patchesOpen = false;
+		if (showPatches)
+			patchesOpen = ImGui::TreeNode("Patches");
+
+		for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+		{
+			bool patchOpen = false;
+			if (patchesOpen)
+				patchOpen = ImGui::TreeNode((string("Patch ") + std::to_string(i)).c_str());
+
+			for (GLuint j = 0; j < 4; ++j)
+				for (GLuint k = 0; k < 4; ++k)
+				{
+					if (patchOpen)
+					{
+						const float (&vertex)[threeD] = TeapotVertices[TeapotIndices[i][j][k]];
+						ImGui::Text("[%u][%u] = %f %f %f", j, k, vertex[0], vertex[1], vertex[2]);
+					}
+
+					if ((j == 0 || j == 3) && (k == 0 || k == 3))
+						anchorIndices.push_back(TeapotIndices[i][j][k]);
+					else
+						controlIndices.push_back(TeapotIndices[i][j][k]);
+				}
+
+			if (patchOpen)
+				ImGui::TreePop();
+		}
+
+		if (patchesOpen)
+			ImGui::TreePop();
+
+		glPointSize(5);
+
+		RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
+		RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
+	}
+
+	void
+	RenderControlMeshes()
+	{
+		BindTeapotVertices();
 
         if (showControlMeshes)
 		{
@@ -138,115 +191,115 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			{
 				for (GLuint j = 0; j < 4; ++j)
 				{
-					for (GLuint k = 0; k < 3; ++k)
+					for (GLuint k = 0; k < 4; ++k)
 					{
-						indices.push_back(TeapotIndices[i][j][k]);
-						indices.push_back(TeapotIndices[i][j][k + 1]);
-						indices.push_back(TeapotIndices[i][k][j]);
-						indices.push_back(TeapotIndices[i][k + 1][j]);
+						if (k < 3)
+						{
+							indices.push_back(TeapotIndices[i][j][k]);
+							indices.push_back(TeapotIndices[i][j][k + 1]);
+							indices.push_back(TeapotIndices[i][k][j]);
+							indices.push_back(TeapotIndices[i][k + 1][j]);
+						}
 					}
 				}
 			}
 
 			RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
 		}
+	}
 
-        if (showControlPoints)
+    void
+    RenderSlefeTiles(bool showPatches)
+    {
+		bool patchesOpen = false;
+		if (showPatches)
+			patchesOpen = ImGui::TreeNode("Patch slefes");
+
+		vector<Slefe> slefes(patchRange[1]);
+		const double *slefeBase = slefes[0].bounds[0].points[0][0];
+		vector<GLuint> slefeIndices;
+
+		for (GLint patchOffset = 0; patchOffset < patchRange[1]; ++patchOffset)
 		{
-			vector<GLuint> anchorIndices;
-			vector<GLuint> controlIndices;
+			struct Slefe &slefe = slefes[patchOffset];
+			GLuint patchIndex = patchRange[0] + patchOffset;
 
-			for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+			REAL coeff[4][4][threeD];
+			for (GLuint u = 0; u < 4; ++u)
+				for (GLuint v = 0; v < 4; ++v)
+				{
+					const float *vertex = TeapotVertices[TeapotIndices[patchIndex][u][v]];
+					for (GLuint dim = 0; dim < threeD; ++dim)
+						coeff[u][v][dim] = vertex[dim];
+				}
+
+			for (GLuint dim = 0; dim < threeD; ++dim)
+				tpSlefe(coeff[0][0] + dim, sizeof(coeff[0]) / sizeof(REAL), sizeof(coeff[0][0]) / sizeof(REAL),
+						3, 3, numSlefeDivs, numSlefeDivs,
+						slefe.bounds[Slefe::LOWER].points[0][0] + dim,
+						slefe.bounds[Slefe::UPPER].points[0][0] + dim,
+						sizeof(slefe.bounds[0].points[0]) / sizeof(REAL),
+						sizeof(slefe.bounds[0].points[0][0]) / sizeof(REAL));
+
+			bool showPatch = false;
+			if (patchesOpen && showPatches)
+				showPatch = ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str());
+
+			for (GLuint whichBound = 0; whichBound < Slefe::NUM_BOUNDS; ++whichBound)
 			{
-				for (GLuint j = 0; j < 4; ++j)
-					for (GLuint k = 0; k < 4; ++k)
+				struct Slefe::Bounds &bounds = slefe.bounds[whichBound];
+				for (GLuint udiv = 0; udiv <= numSlefeDivs; ++udiv)
+				{
+					for (GLuint vdiv = 0; vdiv <= numSlefeDivs; ++vdiv)
 					{
-						if ((j == 0 || j == 3) && (k == 0 || k == 3))
-							anchorIndices.push_back(TeapotIndices[i][j][k]);
-						else
-							controlIndices.push_back(TeapotIndices[i][j][k]);
+						if (showPatch)
+							ImGui::Text("%s[%u][%u]: %f, %f, %f",
+										(whichBound == Slefe::LOWER) ? "Lower" : "Upper", udiv, vdiv,
+										bounds.points[udiv][vdiv][0],
+										bounds.points[udiv][vdiv][1],
+										bounds.points[udiv][vdiv][2]);
+
+						vec3 point;
+						for (GLuint dim = 0; dim < threeD; ++dim)
+							point[dim] = bounds.points[udiv][vdiv][dim];
+
+						if (udiv < numSlefeDivs)
+						{
+							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
+							slefeIndices.push_back((bounds.points[udiv + 1][vdiv] - slefeBase) / threeD);
+						}
+
+						if (vdiv < numSlefeDivs)
+						{
+							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
+							slefeIndices.push_back((bounds.points[udiv][vdiv + 1] - slefeBase) / threeD);
+						}
+
+						if (whichBound == Slefe::LOWER)
+						{
+							struct Slefe::Bounds &upperBounds = slefe.bounds[Slefe::UPPER];
+							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
+							slefeIndices.push_back((upperBounds.points[udiv][vdiv] - slefeBase) / threeD);
+						}
 					}
+				}
 			}
 
-			glPointSize(5);
-
-			RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
-			RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
+			if (showPatch)
+				ImGui::TreePop();
 		}
 
-		if (showSlefeTiles)
-        {
-		    ImTreeNode rootNode("Patch slefes");
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
+		glBufferData(GL_ARRAY_BUFFER, slefes.size() * sizeof(slefes[0]), slefes.data(), GL_STREAM_DRAW);
 
-		    vector<Slefe> slefes(patchRange[1]);
-		    vector<GLuint> slefeIndices;
+		GLint positionLocation = GetAttribLocation("Position");
+		glEnableVertexAttribArray(positionLocation);
+		glVertexAttribPointer(positionLocation, threeD, GL_DOUBLE, GL_FALSE, 0, 0);
 
-		    for (GLint patchOffset = 0; patchOffset < patchRange[1]; ++patchOffset)
-            {
-                struct Slefe &slefe = slefes[patchOffset];
-		        GLuint patchIndex = patchRange[0] + patchOffset;
+		RenderDebugPrimitives(GL_LINES, 0, 1, 1, slefeIndices);
 
-		        REAL coeff[4][4][3];
-		        for (GLuint u = 0; u < 4; ++u)
-		            for (GLuint v = 0; v < 4; ++v)
-		            {
-		                const float *vertex = TeapotVertices[TeapotIndices[patchIndex][u][v]];
-                        for (GLuint dim = 0; dim < 3; ++dim)
-                            coeff[u][v][dim] = vertex[dim];
-                    }
-
-                for (GLuint dim = 0; dim < 3; ++dim)
-                    tpSlefe(coeff[0][0] + dim, 4 * 3, 3,
-                            3, 3, numSlefeDivs, numSlefeDivs,
-                            slefe.bounds[Slefe::LOWER].points[0][0] + dim,
-                            slefe.bounds[Slefe::UPPER].points[0][0] + dim,
-                            numSlefeDivs * 3, 3);
-
-                REAL *pointsBase = slefes[0].bounds[0].points[0][0];
-
-                bool showPatch;
-                if (rootNode)
-                    showPatch = ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str());
-                else
-                    showPatch = false;
-
-                for (GLuint whichBound = 0; whichBound < Slefe::NUM_BOUNDS; ++whichBound)
-                {
-                    struct Slefe::Bounds &bounds = slefe.bounds[whichBound];
-                    for (GLuint udiv = 0; udiv < numSlefeDivs; ++udiv)
-                    {
-                        for (GLuint vdiv = 0; vdiv < numSlefeDivs; ++vdiv)
-                        {
-                            if (showPatch)
-                                ImGui::Text("%s[%u][%u]: %f, %f, %f",
-                                            (whichBound == Slefe::LOWER) ? "Lower" : "Upper", udiv, vdiv,
-                                            bounds.points[udiv][vdiv][0],
-                                            bounds.points[udiv][vdiv][1],
-                                            bounds.points[udiv][vdiv][2]);
-                        }
-
-                        if (udiv < numSlefeDivs - 1)
-                        {
-                            slefeIndices.push_back((bounds.points[udiv][0] - pointsBase) / 3);
-                            slefeIndices.push_back((bounds.points[udiv + 1][0] - pointsBase) / 3);
-                        }
-                    }
-                }
-
-                if (showPatch)
-                    ImGui::TreePop();
-            }
-
-            glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
-		    glBufferData(GL_ARRAY_BUFFER, slefes.size() * sizeof(slefes[0]), slefes.data(), GL_STREAM_DRAW);
-
-            glEnableVertexAttribArray(positionLocation);
-            glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
-            RenderDebugPrimitives(GL_POINTS, 0, 1, 1, slefeIndices);
-        }
-
-        CheckGLErrors("RenderDebug()");
+		if (patchesOpen)
+			ImGui::TreePop();
     }
 
 public:
@@ -291,25 +344,18 @@ public:
         CheckGLErrors("PixAccCurvedSurf()");
     }
 
+	void
+	RenderPatches()
+	{
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+	}
+
     virtual void
     Render(double /*time*/)
     {
         ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
         glClear(GL_COLOR_BUFFER_BIT);
-
-        static vec3 modelPos;
-        if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
-            if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
-            {
-                patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);
-                patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
-            }
-            ImGui::Checkbox("Show control points", &showControlPoints);
-            ImGui::Checkbox("Show control meshes", &showControlMeshes);
-        }
 
         static float distance = 5;
         static float cameraParams[2];
@@ -342,8 +388,6 @@ public:
         modelViewMatrix = glm::translate(modelViewMatrix, -vec3(0, 0, distance));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[1]), vec3(1, 0, 0));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[0]), vec3(0, 1, 0));
-        modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
-        glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelViewMatrix));
 
         int width, height;
         glfwGetWindowSize(window.get(), &width, &height);
@@ -352,14 +396,40 @@ public:
             projectionMatrix = glm::perspective(glm::radians(fov), float(width) / float(height), 0.1f, 100.0f);
         else
             projectionMatrix = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+
+        static vec3 modelPos;
+		bool showPatches = false;
+        if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
+            if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
+            {
+                patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);
+                patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
+            }
+            ImGui::Checkbox("Show control points", &showControlPoints);
+            ImGui::Checkbox("Show control meshes", &showControlMeshes);
+
+			showPatches = true;
+        }
+        modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
+
+        glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelViewMatrix));
         glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projectionMatrix));
 
-        if (ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen))
+		if (showControlPoints)
+			RenderControlPoints(showPatches);
+		if (showControlMeshes)
+			RenderControlMeshes();
+
+		bool showSlefeNodes = ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen);
+		if (showSlefeNodes)
         {
             ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
         }
 
-        RenderDebug();
+		if (showSlefeTiles)
+			RenderSlefeTiles(showSlefeTiles);
 
         CheckGLErrors("Render()");
     }
