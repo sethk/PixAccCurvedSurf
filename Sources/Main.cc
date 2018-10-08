@@ -51,6 +51,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLint projectionMatrixLocation;
     bool showControlPoints = true;
     bool showControlMeshes = true;
+	Slefe slefes[NumTeapotPatches];
     bool showSlefeTiles = true;
     GLint patchRange[2] = {5, 1};
 
@@ -188,11 +189,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			vector<GLuint> indices;
 
 			for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
-			{
 				for (GLuint j = 0; j < 4; ++j)
-				{
 					for (GLuint k = 0; k < 4; ++k)
-					{
 						if (k < 3)
 						{
 							indices.push_back(TeapotIndices[i][j][k]);
@@ -200,29 +198,17 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 							indices.push_back(TeapotIndices[i][k][j]);
 							indices.push_back(TeapotIndices[i][k + 1][j]);
 						}
-					}
-				}
-			}
 
 			RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
 		}
 	}
 
-    void
-    RenderSlefeTiles(bool showPatches)
-    {
-		bool patchesOpen = false;
-		if (showPatches)
-			patchesOpen = ImGui::TreeNode("Patch slefes");
-
-		vector<Slefe> slefes(patchRange[1]);
-		const double *slefeBase = slefes[0].bounds[0].points[0][0];
-		vector<GLuint> slefeIndices;
-
-		for (GLint patchOffset = 0; patchOffset < patchRange[1]; ++patchOffset)
+	void
+	ComputeSlefes()
+	{
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
-			struct Slefe &slefe = slefes[patchOffset];
-			GLuint patchIndex = patchRange[0] + patchOffset;
+			struct Slefe &slefe = slefes[patchIndex];
 
 			REAL coeff[4][4][threeD];
 			for (GLuint u = 0; u < 4; ++u)
@@ -240,6 +226,22 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						slefe.bounds[Slefe::UPPER].points[0][0] + dim,
 						sizeof(slefe.bounds[0].points[0]) / sizeof(REAL),
 						sizeof(slefe.bounds[0].points[0][0]) / sizeof(REAL));
+		}
+	}
+
+    void
+    RenderSlefeTiles(bool showPatches)
+    {
+		bool patchesOpen = false;
+		if (showPatches)
+			patchesOpen = ImGui::TreeNode("Patch slefes");
+
+		const double *slefeBase = slefes[0].bounds[0].points[0][0];
+		vector<GLuint> slefeIndices;
+
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			Slefe &slefe = slefes[patchIndex];
 
 			bool showPatch = false;
 			if (patchesOpen && showPatches)
@@ -290,7 +292,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		}
 
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
-		glBufferData(GL_ARRAY_BUFFER, slefes.size() * sizeof(slefes[0]), slefes.data(), GL_STREAM_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(slefes), slefes, GL_STREAM_DRAW);
 
 		GLint positionLocation = GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
@@ -340,6 +342,8 @@ public:
 
         setenv("SUBLIMEPATH", ".", false);
         InitBounds();
+
+		ComputeSlefes();
 
         CheckGLErrors("PixAccCurvedSurf()");
     }
@@ -434,14 +438,18 @@ public:
 		if (showControlMeshes)
 			RenderControlMeshes();
 
+		static bool showSlefeBoxes = true;
 		bool showSlefeNodes = ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen);
 		if (showSlefeNodes)
         {
             ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
+			ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
         }
 
 		if (showSlefeTiles)
-			RenderSlefeTiles(showSlefeTiles);
+			RenderSlefeTiles(showSlefeNodes);
+		if (showSlefeBoxes)
+			RenderSlefeBoxes();
 
         CheckGLErrors("Render()");
     }
