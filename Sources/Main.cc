@@ -16,7 +16,9 @@ using std::ostringstream;
 using std::clog;
 using std::endl;
 using std::vector;
+using glm::vec4;
 using glm::vec3;
+using glm::vec2;
 using glm::mat4;
 using glm::value_ptr;
 
@@ -28,7 +30,7 @@ struct Slefe
     enum {LOWER, UPPER, NUM_BOUNDS};
     struct Bounds
     {
-        REAL points[numSlefeDivs + 1][numSlefeDivs + 1][threeD];
+        vec3 points[numSlefeDivs + 1][numSlefeDivs + 1];
     } bounds[NUM_BOUNDS];
 };
 
@@ -48,7 +50,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLuint program;
     vec3 modelCentroid;
     GLint modelViewMatrixLocation;
+	mat4 modelViewMatrix;
     GLint projectionMatrixLocation;
+	mat4 projectionMatrix;
     bool showControlPoints = true;
     bool showControlMeshes = true;
 	Slefe slefes[NumTeapotPatches];
@@ -113,15 +117,28 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
 
         glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+	}
 
-        GLint positionLocation = GetAttribLocation("Position");
-        glEnableVertexAttribArray(positionLocation);
-        glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
+	void
+	SetCamera(mat4 &modelView, mat4 &projection)
+	{
+        glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelView));
+        glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projection));
+	}
+
+	void
+	Set3DCamera()
+	{
+		SetCamera(modelViewMatrix, projectionMatrix);
 	}
 
 	void
 	RenderDebugPrimitives(GLenum type, GLfloat r, GLfloat g, GLfloat b, const vector<GLuint> &indices)
 	{
+		GLint positionLocation = GetAttribLocation("Position");
+		glEnableVertexAttribArray(positionLocation);
+		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
+
 		GLint colorLocation = GetUniformLocation("Color");
 		glUniform4f(colorLocation, r, g, b, 1);
 
@@ -173,8 +190,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		if (patchesOpen)
 			ImGui::TreePop();
 
-		glPointSize(5);
+		Set3DCamera();
 
+		glPointSize(5);
 		RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
 		RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
 	}
@@ -184,32 +202,28 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	{
 		BindTeapotVertices();
 
-        if (showControlMeshes)
-		{
-			vector<GLuint> indices;
+		vector<GLuint> indices;
 
-			for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
-				for (GLuint j = 0; j < 4; ++j)
-					for (GLuint k = 0; k < 4; ++k)
-						if (k < 3)
-						{
-							indices.push_back(TeapotIndices[i][j][k]);
-							indices.push_back(TeapotIndices[i][j][k + 1]);
-							indices.push_back(TeapotIndices[i][k][j]);
-							indices.push_back(TeapotIndices[i][k + 1][j]);
-						}
+		for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
+			for (GLuint j = 0; j < 4; ++j)
+				for (GLuint k = 0; k < 4; ++k)
+					if (k < 3)
+					{
+						indices.push_back(TeapotIndices[i][j][k]);
+						indices.push_back(TeapotIndices[i][j][k + 1]);
+						indices.push_back(TeapotIndices[i][k][j]);
+						indices.push_back(TeapotIndices[i][k + 1][j]);
+					}
 
-			RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
-		}
+		Set3DCamera();
+		RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
 	}
 
 	void
 	ComputeSlefes()
 	{
-		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		for (GLint patchIndex = 0; patchIndex < NumTeapotPatches; ++patchIndex)
 		{
-			struct Slefe &slefe = slefes[patchIndex];
-
 			REAL coeff[4][4][threeD];
 			for (GLuint u = 0; u < 4; ++u)
 				for (GLuint v = 0; v < 4; ++v)
@@ -219,13 +233,22 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						coeff[u][v][dim] = vertex[dim];
 				}
 
+			REAL lower[numSlefeDivs + 1][numSlefeDivs + 1][3];
+			REAL upper[numSlefeDivs + 1][numSlefeDivs + 1][3];
+
 			for (GLuint dim = 0; dim < threeD; ++dim)
 				tpSlefe(coeff[0][0] + dim, sizeof(coeff[0]) / sizeof(REAL), sizeof(coeff[0][0]) / sizeof(REAL),
 						3, 3, numSlefeDivs, numSlefeDivs,
-						slefe.bounds[Slefe::LOWER].points[0][0] + dim,
-						slefe.bounds[Slefe::UPPER].points[0][0] + dim,
-						sizeof(slefe.bounds[0].points[0]) / sizeof(REAL),
-						sizeof(slefe.bounds[0].points[0][0]) / sizeof(REAL));
+						lower[0][0] + dim, upper[0][0] + dim,
+						sizeof(lower[0]) / sizeof(REAL), sizeof(lower[0][0]) / sizeof(REAL));
+
+			struct Slefe &slefe = slefes[patchIndex];
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+				{
+					slefe.bounds[Slefe::LOWER].points[u][v] = vec3(lower[u][v][0], lower[u][v][1], lower[u][v][2]);
+					slefe.bounds[Slefe::UPPER].points[u][v] = vec3(upper[u][v][0], upper[u][v][1], upper[u][v][2]);
+				}
 		}
 	}
 
@@ -236,7 +259,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		if (showPatches)
 			patchesOpen = ImGui::TreeNode("Patch slefes");
 
-		const double *slefeBase = slefes[0].bounds[0].points[0][0];
+		const vec3 *slefeBase = &(slefes[0].bounds[0].points[0][0]);
 		vector<GLuint> slefeIndices;
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
@@ -267,21 +290,21 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 						if (udiv < numSlefeDivs)
 						{
-							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
-							slefeIndices.push_back((bounds.points[udiv + 1][vdiv] - slefeBase) / threeD);
+							slefeIndices.push_back(&(bounds.points[udiv][vdiv]) - slefeBase);
+							slefeIndices.push_back(&(bounds.points[udiv + 1][vdiv]) - slefeBase);
 						}
 
 						if (vdiv < numSlefeDivs)
 						{
-							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
-							slefeIndices.push_back((bounds.points[udiv][vdiv + 1] - slefeBase) / threeD);
+							slefeIndices.push_back(&(bounds.points[udiv][vdiv]) - slefeBase);
+							slefeIndices.push_back(&(bounds.points[udiv][vdiv + 1]) - slefeBase);
 						}
 
 						if (whichBound == Slefe::LOWER)
 						{
 							struct Slefe::Bounds &upperBounds = slefe.bounds[Slefe::UPPER];
-							slefeIndices.push_back((bounds.points[udiv][vdiv] - slefeBase) / threeD);
-							slefeIndices.push_back((upperBounds.points[udiv][vdiv] - slefeBase) / threeD);
+							slefeIndices.push_back(&(bounds.points[udiv][vdiv]) - slefeBase);
+							slefeIndices.push_back(&(upperBounds.points[udiv][vdiv]) - slefeBase);
 						}
 					}
 				}
@@ -294,15 +317,98 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(slefes), slefes, GL_STREAM_DRAW);
 
-		GLint positionLocation = GetAttribLocation("Position");
-		glEnableVertexAttribArray(positionLocation);
-		glVertexAttribPointer(positionLocation, threeD, GL_DOUBLE, GL_FALSE, 0, 0);
-
+		Set3DCamera();
 		RenderDebugPrimitives(GL_LINES, 0, 1, 1, slefeIndices);
 
 		if (patchesOpen)
 			ImGui::TreePop();
     }
+
+	void
+	RenderSlefeBoxes()
+	{
+		int width, height;
+		glfwGetWindowSize(window.get(), &width, &height);
+		vec2 halfWindowSize = vec2(width / 2.0, height / 2.0);
+
+		vector<vec3> boxVertices;
+		vector<GLuint> boxIndices;
+		vector<GLuint> screenRectIndices;
+
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+				{
+					Slefe &slefe = slefes[patchIndex];
+					vec3 &lower = slefe.bounds[Slefe::LOWER].points[u][v];
+					vec3 &upper = slefe.bounds[Slefe::UPPER].points[u][v];
+					vec3 center = (lower + upper) / vec3(2.0);
+					vec3 halfSize = (upper - lower) / vec3(2.0);
+
+					GLuint startIndex = boxVertices.size();
+
+					boxVertices.push_back(center + halfSize * vec3(1, -1, -1));
+					boxVertices.push_back(center + halfSize * vec3(1, -1, 1));
+					boxVertices.push_back(center + halfSize * vec3(1, 1, 1));
+					boxVertices.push_back(center + halfSize * vec3(1, 1, -1));
+					boxVertices.push_back(center + halfSize * vec3(-1, -1, -1));
+					boxVertices.push_back(center + halfSize * vec3(-1, -1, 1));
+					boxVertices.push_back(center + halfSize * vec3(-1, 1, 1));
+					boxVertices.push_back(center + halfSize * vec3(-1, 1, -1));
+
+					for (GLuint i = 0; i < 4; ++i)
+					{
+						boxIndices.push_back(startIndex + i);
+						boxIndices.push_back(startIndex + ((i + 1) % 4));
+						boxIndices.push_back(startIndex + 4 + i);
+						boxIndices.push_back(startIndex + 4 + ((i + 1) % 4));
+
+						boxIndices.push_back(startIndex + i);
+						boxIndices.push_back(startIndex + 4 + i);
+					}
+
+					vec2 screenRectMin = vec2(FLT_MAX, FLT_MAX), screenRectMax = vec2(FLT_MIN, FLT_MIN);
+					for (GLuint i = 0; i < 8; ++i)
+					{
+						vec4 vertex = vec4(boxVertices[startIndex + i], 1);
+						vec4 clipVertex = projectionMatrix * modelViewMatrix * vertex;
+						vec2 normVertex = vec2(clipVertex[0], clipVertex[1]) / vec2(clipVertex.w);
+						vec3 winVertex = vec3(halfWindowSize + normVertex * halfWindowSize, 0);
+
+						screenRectMin.x = glm::min(screenRectMin.x, winVertex.x);
+						screenRectMin.y = glm::min(screenRectMin.y, winVertex.y);
+						screenRectMax.x = glm::max(screenRectMax.x, winVertex.x);
+						screenRectMax.y = glm::max(screenRectMax.y, winVertex.y);
+					}
+
+					GLuint rectStartIndex = boxVertices.size();
+					boxVertices.push_back(vec3(screenRectMin, 0));
+					boxVertices.push_back(vec3(screenRectMin.x, screenRectMax.y, 0));
+					boxVertices.push_back(vec3(screenRectMax, 0));
+					boxVertices.push_back(vec3(screenRectMax.x, screenRectMin.y, 0));
+
+					for (GLuint i = 0; i < 4; ++i)
+					{
+						screenRectIndices.push_back(rectStartIndex + i);
+						screenRectIndices.push_back(rectStartIndex + ((i + 1) % 4));
+					}
+				}
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
+		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
+
+		Set3DCamera();
+		RenderDebugPrimitives(GL_LINES, 1, 0, 1, boxIndices);
+
+		mat4 identity(1);
+		mat4 screenSpace = glm::ortho(0.0f, float(width), 0.0f, float(height), -1.0f, 1.0f);
+		SetCamera(identity, screenSpace);
+		RenderDebugPrimitives(GL_LINES, 0.5, 0.5, 1, screenRectIndices);
+
+		CheckGLErrors("RenderSlefeBoxes()");
+	}
 
 public:
     PixAccCurvedSurf() : GLFWWindowedApp("PixAccCurvedSurf")
@@ -380,8 +486,8 @@ public:
 			if (ImGui::IsMouseDown(0))
 			{
 				ImVec2 delta = ImGui::GetMouseDragDelta(0, 0);
-				cameraParams[0]+= delta.x;
-				cameraParams[1]+= delta.y;
+				cameraParams[0]+= delta.x / 3;
+				cameraParams[1]+= delta.y / 3;
 				ImGui::ResetMouseDragDelta(0);
 			}
 			else if (ImGui::IsMouseDown(1))
@@ -392,7 +498,8 @@ public:
 				ImGui::ResetMouseDragDelta(1);
 			}
 
-			cameraOffset[2]+= io.MouseWheel;
+			if (io.MouseWheel != 0)
+				cameraOffset[2]+= io.MouseWheel / 10.0;
 		}
 		while (cameraParams[0] <= -180)
 			cameraParams[0]+= 360;
@@ -400,18 +507,17 @@ public:
 			cameraParams[0]-= 360;
 		cameraParams[1] = glm::clamp(cameraParams[1], -90.0f, 90.0f);
 
-        mat4 modelViewMatrix(1);
-        modelViewMatrix = glm::translate(modelViewMatrix, -cameraOffset);
+        modelViewMatrix = glm::translate(mat4(1), -cameraOffset);
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[1]), vec3(1, 0, 0));
         modelViewMatrix = glm::rotate(modelViewMatrix, glm::radians(cameraParams[0]), vec3(0, 1, 0));
 
         int width, height;
         glfwGetWindowSize(window.get(), &width, &height);
-        mat4 projectionMatrix;
+		float aspect = float(width) / float(height);
         if (perspective)
-            projectionMatrix = glm::perspective(glm::radians(fov), float(width) / float(height), 0.1f, 100.0f);
+            projectionMatrix = glm::perspective(glm::radians(fov), aspect, 0.1f, 100.0f);
         else
-            projectionMatrix = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+            projectionMatrix = glm::ortho(-3.0f * aspect, 3.0f * aspect, -3.0f, 3.0f, -10.0f, 10.0f);
 
         static vec3 modelPos;
 		bool showPatches = false;
@@ -429,9 +535,6 @@ public:
 			showPatches = true;
         }
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
-
-        glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelViewMatrix));
-        glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projectionMatrix));
 
 		if (showControlPoints)
 			RenderControlPoints(showPatches);
