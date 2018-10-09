@@ -98,6 +98,13 @@ public:
         return location;
     }
 
+	void
+	SetUniform(const char *name, const glm::vec4 &v)
+	{
+		GLint location = GetUniformLocation(name, true);
+		glUniform4fv(location, 1, value_ptr(v));
+	}
+
     GLint
     GetAttribLocation(const char *name, bool required = true)
     {

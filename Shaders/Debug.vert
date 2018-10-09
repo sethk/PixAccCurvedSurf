@@ -3,7 +3,6 @@ uniform mat4 ModelViewMatrix;
 uniform mat4 ProjectionMatrix;
 
 in vec3 Position;
-in vec4 Color;
 
 out gl_PerVertex
 {

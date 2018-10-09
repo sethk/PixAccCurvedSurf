@@ -59,15 +59,15 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         NUM_BUFFERS
     };
     GLuint buffers[NUM_BUFFERS];
+	ShaderProgram mainProgram;
     ShaderProgram debugProgram;
     vec3 modelCentroid;
 	mat4 modelViewMatrix;
 	mat4 projectionMatrix;
-    bool showControlPoints = true;
-    bool showControlMeshes = true;
 	Slefe slefes[NumTeapotPatches];
-    bool showSlefeTiles = true;
-    GLint patchRange[2] = {5, 1};
+    GLint patchRange[2] = {0, NumTeapotPatches};
+	bool showModel = true;
+	bool showWireframe = false;
 
 	void
 	Set3DCamera(ShaderProgram &program)
@@ -94,13 +94,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
-	RenderControlPoints(bool showPatches)
+	RenderControlPoints(bool showNodes)
 	{
 		vector<GLuint> anchorIndices;
 		vector<GLuint> controlIndices;
 
 		bool patchesOpen = false;
-		if (showPatches)
+		if (showNodes)
 			patchesOpen = ImGui::TreeNode("Patches");
 
 		for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
@@ -160,6 +160,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						indices.push_back(TeapotIndices[i][k + 1][j]);
 					}
 
+		debugProgram.Use();
+
         glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
 
         glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
@@ -203,10 +205,10 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
     void
-    RenderSlefeTiles(bool showPatches)
+    RenderSlefeTiles(bool showNodes)
     {
 		bool patchesOpen = false;
-		if (showPatches)
+		if (showNodes)
 			patchesOpen = ImGui::TreeNode("Patch slefes");
 
 		const vec3 *slefeBase = &(slefes[0].bounds[0].points[0][0]);
@@ -217,7 +219,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			Slefe &slefe = slefes[patchIndex];
 
 			bool showPatch = false;
-			if (patchesOpen && showPatches)
+			if (patchesOpen && showNodes)
 				showPatch = ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str());
 
 			for (GLuint whichBound = 0; whichBound < Slefe::NUM_BOUNDS; ++whichBound)
@@ -334,6 +336,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		debugProgram.Use();
 
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
 
@@ -373,10 +377,17 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
 
+		mainProgram.LoadShader(GL_VERTEX_SHADER, "Noop.vert");
+		mainProgram.LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
+		mainProgram.LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
+		mainProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
+
+		mainProgram.Link();
+
         glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
 
         debugProgram.LoadShader(GL_VERTEX_SHADER, "Debug.vert");
-        debugProgram.LoadShader(GL_FRAGMENT_SHADER, "Debug.frag");
+        debugProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
 
 		debugProgram.Link();
 
@@ -386,6 +397,8 @@ public:
         InitBounds();
 
 		ComputeSlefes();
+
+		glEnable(GL_DEPTH_TEST);
 
         CheckGLErrors("PixAccCurvedSurf()");
     }
@@ -446,9 +459,55 @@ public:
 	}
 
 	void
-	RenderPatches()
+	RenderModel()
 	{
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+
+		//
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+		//
+
+		mainProgram.Use();
+
+		GLint positionLocation = mainProgram.GetAttribLocation("Position");
+		glEnableVertexAttribArray(positionLocation);
+		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
+
+		Set3DCamera(mainProgram);
+
+		mainProgram.SetUniform("Color", vec4(1, 1, 1, 1));
+
+		if (showModel)
+		{
+			glDrawElements(GL_PATCHES,
+					NumTeapotVerticesPerPatch * patchRange[1],
+					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+
+			// Use inverted color for wireframe
+			if (showWireframe)
+				mainProgram.SetUniform("Color", vec4(0, 0, 0, 1));
+		}
+
+		if (showWireframe)
+		{
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+			static float polygonOffset[2] = {-1, 0};
+			ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
+			glPolygonOffset(polygonOffset[0], polygonOffset[1]);
+
+			glEnable(GL_POLYGON_OFFSET_LINE);
+
+			glDrawElements(GL_PATCHES,
+					NumTeapotVerticesPerPatch * patchRange[1],
+					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glEnable(GL_POLYGON_OFFSET_LINE);
+		}
+
+		glBindVertexArray(0);
 	}
 
     virtual void
@@ -456,7 +515,7 @@ public:
     {
         ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		static vec3 cameraOffset(0, 0, 5);
         static float cameraParams[2];
@@ -510,8 +569,12 @@ public:
         else
             projectionMatrix = glm::ortho(-3.0f * aspect, 3.0f * aspect, -3.0f, 3.0f, -10.0f, 10.0f);
 
+		static bool showControlPoints = false;
+		static bool showControlMeshes = false;
+		static bool showSlefeTiles = false;
+
         static vec3 modelPos;
-		bool showPatches = false;
+		bool showNodes = false;
         if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
@@ -520,14 +583,16 @@ public:
                 patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);
                 patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
             }
+			ImGui::Checkbox("Show", &showModel);
+			ImGui::Checkbox("Show wireframe", &showWireframe);
             ImGui::Checkbox("Show control points", &showControlPoints);
             ImGui::Checkbox("Show control meshes", &showControlMeshes);
 
-			showPatches = true;
+			showNodes = true;
         }
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
 
-		static bool showSlefeBoxes = true;
+		static bool showSlefeBoxes = false;
 		bool showSlefeNodes = ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen);
 		if (showSlefeNodes)
         {
@@ -537,10 +602,11 @@ public:
 
 		struct TessParams patchTessParams[NumTeapotPatches];
 		ComputeTessParams(patchTessParams);
-		RenderPatches();
+
+		RenderModel();
 
 		if (showControlPoints)
-			RenderControlPoints(showPatches);
+			RenderControlPoints(showNodes);
 		if (showControlMeshes)
 			RenderControlMeshes();
 		if (showSlefeTiles)
