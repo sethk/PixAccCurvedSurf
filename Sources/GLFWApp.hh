@@ -221,26 +221,6 @@ public:
 	        throw std::runtime_error(oss.str());
 		}
 	}
-
-	void
-	CheckShaderStatus(GLuint object,
-					  GLenum pname,
-					  const std::string &desc,
-					  void (*getParam)(GLuint object, GLenum pname, GLint *value),
-					  void (*getInfoLog)(GLuint object, GLsizei len, GLsizei *lenp, GLchar *log))
-	{
-	    GLint status;
-	    getParam(object, pname, &status);
-	    if (!status)
-		{
-			GLsizei len;
-			getParam(object, GL_INFO_LOG_LENGTH, &len);
-
-			GLchar log[len + 1];
-			getInfoLog(object, len, &len, log);
-			throw std::runtime_error(desc + " failed " + log);
-		}
-	}
 };
 
 class GLFWWindowedApp : public GLFWApp

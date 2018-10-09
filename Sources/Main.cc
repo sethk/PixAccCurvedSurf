@@ -1,17 +1,14 @@
 #include "GLFWApp.hh"
+#include "ShaderProgram.hh"
 #include "../Data/Teapot.h"
 #include <istream>
-#include <fstream>
 #include <vector>
-#include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <SubLiME.h>
 
 using std::runtime_error;
 using std::array;
 using std::string;
-using std::ifstream;
 using std::ostringstream;
 using std::clog;
 using std::endl;
@@ -34,6 +31,21 @@ struct Slefe
     } bounds[NUM_BOUNDS];
 };
 
+struct AABB
+{
+	vec3 min, max;
+};
+
+struct TessParams
+{
+	struct SlefeBoxes
+	{
+		struct AABB worldAxisBox;
+		struct AABB screenAxisBox;
+		float maxScreenEdge;
+	} slefeBoxes[numSlefeDivs + 1][numSlefeDivs + 1];
+};
+
 class PixAccCurvedSurf : public GLFWWindowedApp
 {
     enum {VERTEX_ARRAY_TEAPOT, VERTEX_ARRAY_DEBUG, NUM_VERTEX_ARRAYS};
@@ -47,11 +59,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         NUM_BUFFERS
     };
     GLuint buffers[NUM_BUFFERS];
-    GLuint program;
+    ShaderProgram debugProgram;
     vec3 modelCentroid;
-    GLint modelViewMatrixLocation;
 	mat4 modelViewMatrix;
-    GLint projectionMatrixLocation;
 	mat4 projectionMatrix;
     bool showControlPoints = true;
     bool showControlMeshes = true;
@@ -59,87 +69,20 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     bool showSlefeTiles = true;
     GLint patchRange[2] = {5, 1};
 
-    void
-    LoadShader(GLenum type, const string &path)
-    {
-        GLuint shader = glCreateShader(type);
-
-        ifstream file(path);
-        if (!file)
-            throw runtime_error("Could not open " + path);
-
-        ostringstream oss;
-        oss << file.rdbuf();
-
-        string source = oss.str();
-        const GLchar *c_source = source.c_str();
-        glShaderSource(shader, 1, &c_source, NULL);
-
-        glCompileShader(shader);
-        try
-        {
-            CheckShaderStatus(shader, GL_COMPILE_STATUS, "glCompileShader(" + path + ")",
-                              glGetShaderiv, glGetShaderInfoLog);
-        }
-        catch (std::runtime_error &error)
-        {
-            clog << "Error while compiling shader " << path << ':' << endl;
-            clog << "<<<<<<<<<" << endl << source << endl << "<<<<<<<<<" << endl;
-            throw;
-        }
-
-        glAttachShader(program, shader);
-    }
-
-    GLint
-    GetUniformLocation(const char *name, bool required = true)
-    {
-        GLint location = glGetUniformLocation(program, name);
-        if (location == -1 && required)
-            throw runtime_error(string("Uniform location ") + name + " was not found in program");
-
-        return location;
-    }
-
-    GLint
-    GetAttribLocation(const char *name, bool required = true)
-    {
-        GLint location = glGetAttribLocation(program, name);
-        if (location == -1 && required)
-            throw runtime_error(string("Attribute location ") + name + " was not found in the program");
-
-        return location;
-    }
-
 	void
-	BindTeapotVertices()
+	Set3DCamera(ShaderProgram &program)
 	{
-        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
-
-        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
-	}
-
-	void
-	SetCamera(mat4 &modelView, mat4 &projection)
-	{
-        glUniformMatrix4fv(modelViewMatrixLocation, 1, GL_FALSE, value_ptr(modelView));
-        glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, value_ptr(projection));
-	}
-
-	void
-	Set3DCamera()
-	{
-		SetCamera(modelViewMatrix, projectionMatrix);
+		program.SetCamera(modelViewMatrix, projectionMatrix);
 	}
 
 	void
 	RenderDebugPrimitives(GLenum type, GLfloat r, GLfloat g, GLfloat b, const vector<GLuint> &indices)
 	{
-		GLint positionLocation = GetAttribLocation("Position");
+		GLint positionLocation = debugProgram.GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
 
-		GLint colorLocation = GetUniformLocation("Color");
+		GLint colorLocation = debugProgram.GetUniformLocation("Color");
 		glUniform4f(colorLocation, r, g, b, 1);
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
@@ -153,8 +96,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	RenderControlPoints(bool showPatches)
 	{
-		BindTeapotVertices();
-
 		vector<GLuint> anchorIndices;
 		vector<GLuint> controlIndices;
 
@@ -190,7 +131,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		if (patchesOpen)
 			ImGui::TreePop();
 
-		Set3DCamera();
+		debugProgram.Use();
+
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+
+		Set3DCamera(debugProgram);
 
 		glPointSize(5);
 		RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
@@ -200,8 +147,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	RenderControlMeshes()
 	{
-		BindTeapotVertices();
-
 		vector<GLuint> indices;
 
 		for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
@@ -215,7 +160,12 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						indices.push_back(TeapotIndices[i][k + 1][j]);
 					}
 
-		Set3DCamera();
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+
+		Set3DCamera(debugProgram);
+
 		RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
 	}
 
@@ -314,10 +264,14 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				ImGui::TreePop();
 		}
 
+		debugProgram.Use();
+
+        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(slefes), slefes, GL_STREAM_DRAW);
 
-		Set3DCamera();
+		Set3DCamera(debugProgram);
 		RenderDebugPrimitives(GL_LINES, 0, 1, 1, slefeIndices);
 
 		if (patchesOpen)
@@ -325,86 +279,76 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     }
 
 	void
-	RenderSlefeBoxes()
+	GetAABBVertices(const AABB &box, vec3 vertices[8])
 	{
-		int width, height;
-		glfwGetWindowSize(window.get(), &width, &height);
-		vec2 halfWindowSize = vec2(width / 2.0, height / 2.0);
+		vertices[0] = box.min;
+		vertices[1] = vec3(box.min.x, box.min.y, box.max.z);
+		vertices[2] = vec3(box.min.x, box.max.y, box.max.z);
+		vertices[3] = vec3(box.min.x, box.max.y, box.min.z);
+		vertices[4] = vec3(box.max.x, box.min.y, box.min.z);
+		vertices[5] = vec3(box.max.x, box.min.y, box.max.z);
+		vertices[6] = box.max;
+		vertices[7] = vec3(box.max.x, box.max.y, box.min.z);
+	}
 
+	void
+	RenderAABBWireframe(const AABB &box, vector<vec3> &vertices, vector<GLuint> &indices)
+	{
+		GLuint startIndex = vertices.size();
+		vertices.resize(startIndex + 8);
+
+		GetAABBVertices(box, vertices.data() + startIndex);
+
+		for (GLuint i = 0; i < 4; ++i)
+		{
+			indices.push_back(startIndex + i);
+			indices.push_back(startIndex + ((i + 1) % 4));
+			indices.push_back(startIndex + 4 + i);
+			indices.push_back(startIndex + 4 + ((i + 1) % 4));
+
+			indices.push_back(startIndex + i);
+			indices.push_back(startIndex + 4 + i);
+		}
+	}
+
+	void
+	RenderSlefeBoxes(const TessParams patchTessParams[])
+	{
 		vector<vec3> boxVertices;
 		vector<GLuint> boxIndices;
 		vector<GLuint> screenRectIndices;
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
+			const TessParams &tessParams = patchTessParams[patchIndex];
+
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					Slefe &slefe = slefes[patchIndex];
-					vec3 &lower = slefe.bounds[Slefe::LOWER].points[u][v];
-					vec3 &upper = slefe.bounds[Slefe::UPPER].points[u][v];
-					vec3 center = (lower + upper) / vec3(2.0);
-					vec3 halfSize = (upper - lower) / vec3(2.0);
+					const TessParams::SlefeBoxes &boxes = tessParams.slefeBoxes[u][v];
 
-					GLuint startIndex = boxVertices.size();
-
-					boxVertices.push_back(center + halfSize * vec3(1, -1, -1));
-					boxVertices.push_back(center + halfSize * vec3(1, -1, 1));
-					boxVertices.push_back(center + halfSize * vec3(1, 1, 1));
-					boxVertices.push_back(center + halfSize * vec3(1, 1, -1));
-					boxVertices.push_back(center + halfSize * vec3(-1, -1, -1));
-					boxVertices.push_back(center + halfSize * vec3(-1, -1, 1));
-					boxVertices.push_back(center + halfSize * vec3(-1, 1, 1));
-					boxVertices.push_back(center + halfSize * vec3(-1, 1, -1));
-
-					for (GLuint i = 0; i < 4; ++i)
-					{
-						boxIndices.push_back(startIndex + i);
-						boxIndices.push_back(startIndex + ((i + 1) % 4));
-						boxIndices.push_back(startIndex + 4 + i);
-						boxIndices.push_back(startIndex + 4 + ((i + 1) % 4));
-
-						boxIndices.push_back(startIndex + i);
-						boxIndices.push_back(startIndex + 4 + i);
-					}
-
-					vec2 screenRectMin = vec2(FLT_MAX, FLT_MAX), screenRectMax = vec2(FLT_MIN, FLT_MIN);
-					for (GLuint i = 0; i < 8; ++i)
-					{
-						vec4 vertex = vec4(boxVertices[startIndex + i], 1);
-						vec4 clipVertex = projectionMatrix * modelViewMatrix * vertex;
-						vec2 normVertex = vec2(clipVertex[0], clipVertex[1]) / vec2(clipVertex.w);
-						vec3 winVertex = vec3(halfWindowSize + normVertex * halfWindowSize, 0);
-
-						screenRectMin.x = glm::min(screenRectMin.x, winVertex.x);
-						screenRectMin.y = glm::min(screenRectMin.y, winVertex.y);
-						screenRectMax.x = glm::max(screenRectMax.x, winVertex.x);
-						screenRectMax.y = glm::max(screenRectMax.y, winVertex.y);
-					}
-
-					GLuint rectStartIndex = boxVertices.size();
-					boxVertices.push_back(vec3(screenRectMin, 0));
-					boxVertices.push_back(vec3(screenRectMin.x, screenRectMax.y, 0));
-					boxVertices.push_back(vec3(screenRectMax, 0));
-					boxVertices.push_back(vec3(screenRectMax.x, screenRectMin.y, 0));
-
-					for (GLuint i = 0; i < 4; ++i)
-					{
-						screenRectIndices.push_back(rectStartIndex + i);
-						screenRectIndices.push_back(rectStartIndex + ((i + 1) % 4));
-					}
+					RenderAABBWireframe(boxes.worldAxisBox, boxVertices, boxIndices);
+					RenderAABBWireframe(boxes.screenAxisBox, boxVertices, screenRectIndices);
 				}
 		}
+
+		debugProgram.Use();
 
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
 
-		Set3DCamera();
+		Set3DCamera(debugProgram);
+
 		RenderDebugPrimitives(GL_LINES, 1, 0, 1, boxIndices);
 
 		mat4 identity(1);
+
+		int width, height;
+		glfwGetWindowSize(window.get(), &width, &height);
 		mat4 screenSpace = glm::ortho(0.0f, float(width), 0.0f, float(height), -1.0f, 1.0f);
-		SetCamera(identity, screenSpace);
+
+		debugProgram.SetCamera(identity, screenSpace);
+
 		RenderDebugPrimitives(GL_LINES, 0.5, 0.5, 1, screenRectIndices);
 
 		CheckGLErrors("RenderSlefeBoxes()");
@@ -431,18 +375,10 @@ public:
 
         glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
 
-        program = glCreateProgram();
+        debugProgram.LoadShader(GL_VERTEX_SHADER, "Debug.vert");
+        debugProgram.LoadShader(GL_FRAGMENT_SHADER, "Debug.frag");
 
-        LoadShader(GL_VERTEX_SHADER, "Debug.vert");
-        LoadShader(GL_FRAGMENT_SHADER, "Debug.frag");
-
-        glLinkProgram(program);
-        CheckShaderStatus(program, GL_LINK_STATUS, "glLinkProgram()", glGetProgramiv, glGetProgramInfoLog);
-
-        glUseProgram(program);
-
-        projectionMatrixLocation = GetUniformLocation("ProjectionMatrix");
-        modelViewMatrixLocation = GetUniformLocation("ModelViewMatrix");
+		debugProgram.Link();
 
         glClearColor(0, 0, 0, 1);
 
@@ -453,6 +389,61 @@ public:
 
         CheckGLErrors("PixAccCurvedSurf()");
     }
+
+	void
+	ComputeTessParams(struct TessParams patchTessParams[])
+	{
+		int width, height;
+		glfwGetWindowSize(window.get(), &width, &height);
+		vec2 halfWindowSize = vec2(width / 2.0, height / 2.0);
+
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			Slefe &slefe = slefes[patchIndex];
+			TessParams &tessParams = patchTessParams[patchIndex];
+
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+				{
+					struct TessParams::SlefeBoxes &boxes = tessParams.slefeBoxes[u][v];
+
+					vec3 &lower = slefe.bounds[Slefe::LOWER].points[u][v];
+					vec3 &upper = slefe.bounds[Slefe::UPPER].points[u][v];
+
+					vec3 center = (lower + upper) / vec3(2.0);
+					vec3 halfSize = (upper - lower) / vec3(2.0);
+
+					boxes.worldAxisBox.min = center - halfSize;
+					boxes.worldAxisBox.max = center + halfSize;
+
+					vec3 worldBoxVertices[8];
+					GetAABBVertices(boxes.worldAxisBox, worldBoxVertices);
+
+					vec3 &screenMin = boxes.screenAxisBox.min;
+					vec3 &screenMax = boxes.screenAxisBox.max;
+
+					screenMin = vec3(FLT_MAX);
+					screenMax = vec3(FLT_MIN);
+
+					for (GLuint i = 0; i < 8; ++i)
+					{
+						vec4 worldVertex = vec4(worldBoxVertices[i], 1);
+						vec4 clipVertex = projectionMatrix * modelViewMatrix * worldVertex;
+						vec2 normVertex = vec2(clipVertex[0], clipVertex[1]) / vec2(clipVertex.w);
+						vec3 winVertex = vec3(halfWindowSize + normVertex * halfWindowSize, 0);
+
+						screenMin.x = glm::min(screenMin.x, winVertex.x);
+						screenMin.y = glm::min(screenMin.y, winVertex.y);
+						screenMin.z = glm::min(screenMin.z, winVertex.z);
+						screenMax.x = glm::max(screenMax.x, winVertex.x);
+						screenMax.y = glm::max(screenMax.y, winVertex.y);
+						screenMin.z = glm::max(screenMax.z, winVertex.z);
+					}
+
+					boxes.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
+				}
+		}
+	}
 
 	void
 	RenderPatches()
@@ -536,11 +527,6 @@ public:
         }
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
 
-		if (showControlPoints)
-			RenderControlPoints(showPatches);
-		if (showControlMeshes)
-			RenderControlMeshes();
-
 		static bool showSlefeBoxes = true;
 		bool showSlefeNodes = ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen);
 		if (showSlefeNodes)
@@ -549,10 +535,18 @@ public:
 			ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
         }
 
+		struct TessParams patchTessParams[NumTeapotPatches];
+		ComputeTessParams(patchTessParams);
+		RenderPatches();
+
+		if (showControlPoints)
+			RenderControlPoints(showPatches);
+		if (showControlMeshes)
+			RenderControlMeshes();
 		if (showSlefeTiles)
 			RenderSlefeTiles(showSlefeNodes);
 		if (showSlefeBoxes)
-			RenderSlefeBoxes();
+			RenderSlefeBoxes(patchTessParams);
 
         CheckGLErrors("Render()");
     }
