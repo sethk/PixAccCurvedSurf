@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 
 add_executable(${PROJECT_NAME} Sources/Main.cc)
 
-foreach(SHADER Debug.vert UniformColor.frag Noop.vert iPASS.tesc iPASS.tese)
+foreach(SHADER Debug.vert UniformColor.frag iPASS.vert iPASS.tesc iPASS.tese)
     configure_file(Shaders/${SHADER} ${SHADER} COPYONLY)
 endforeach()
 

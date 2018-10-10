@@ -54,6 +54,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     {
         BUFFER_CONTROL_POINTS,
         BUFFER_CONTROL_POINT_INDICES,
+		BUFFER_TESS_LEVELS,
         BUFFER_DEBUG_VERTICES,
         BUFFER_DEBUG_INDICES,
         NUM_BUFFERS
@@ -371,13 +372,13 @@ public:
 
         modelCentroid = vec3(0);
         for (GLuint i = 0; i < NumTeapotVertices; ++i)
-            modelCentroid+= vec3(TeapotVertices[i][0], TeapotVertices[i][1], TeapotVertices[i][2]);
+            modelCentroid+= vec3(TeapotVertices[i][0], TeapotVertices[i][1], 0/*TeapotVertices[i][2]*/);
         modelCentroid/= NumTeapotVertices;
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
 
-		mainProgram.LoadShader(GL_VERTEX_SHADER, "Noop.vert");
+		mainProgram.LoadShader(GL_VERTEX_SHADER, "iPASS.vert");
 		mainProgram.LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
 		mainProgram.LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
 		mainProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
@@ -459,7 +460,7 @@ public:
 	}
 
 	void
-	RenderModel()
+	RenderModel(const TessParams patchTessParams[])
 	{
 		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
@@ -473,6 +474,30 @@ public:
 		GLint positionLocation = mainProgram.GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
+
+		float tessLevels[NumTeapotVertices];
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			const TessParams::SlefeBoxes (&slefeBoxes)[4][4] = patchTessParams[patchIndex].slefeBoxes;
+
+			float maxScreenEdge = 0;
+
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
+
+			float tessLevel = sqrt(maxScreenEdge);
+			for (GLuint u = 0; u < 4; ++u)
+				for (GLuint v = 0; v < 4; ++v)
+					tessLevels[TeapotIndices[patchIndex][u][v]] = tessLevel;
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_TESS_LEVELS]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(tessLevels), tessLevels, GL_STREAM_DRAW);
+
+		GLint tessLevelLocation = mainProgram.GetAttribLocation("TessLevel");
+		glEnableVertexAttribArray(tessLevelLocation);
+		glVertexAttribPointer(tessLevelLocation, 1, GL_FLOAT, GL_FALSE, 0, 0);
 
 		Set3DCamera(mainProgram);
 
@@ -603,7 +628,7 @@ public:
 		struct TessParams patchTessParams[NumTeapotPatches];
 		ComputeTessParams(patchTessParams);
 
-		RenderModel();
+		RenderModel(patchTessParams);
 
 		if (showControlPoints)
 			RenderControlPoints(showNodes);
