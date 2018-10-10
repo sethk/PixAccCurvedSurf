@@ -1,7 +1,6 @@
 #version 410 core
 
 layout (quads, equal_spacing, ccw) in;
-out vec4 Color;
 
 uniform mat4 ModelViewMatrix;
 uniform mat4 ProjectionMatrix;

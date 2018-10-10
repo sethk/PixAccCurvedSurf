@@ -36,14 +36,11 @@ struct AABB
 	vec3 min, max;
 };
 
-struct TessParams
+struct SlefeBox
 {
-	struct SlefeBoxes
-	{
-		struct AABB worldAxisBox;
-		struct AABB screenAxisBox;
-		float maxScreenEdge;
-	} slefeBoxes[numSlefeDivs + 1][numSlefeDivs + 1];
+	struct AABB worldAxisBox;
+	struct AABB screenAxisBox;
+	float maxScreenEdge;
 };
 
 class PixAccCurvedSurf : public GLFWWindowedApp
@@ -205,6 +202,33 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		}
 	}
 
+	void
+	ComputeTessLevels(const SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1],
+	                  float vertexTessLevels[NumTeapotVertices])
+	{
+		for (GLuint i = 0; i < NumTeapotVertices; ++i)
+			vertexTessLevels[i] = 0;
+
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			const SlefeBox (&slefeBoxes)[4][4] = patchSlefeBoxes[patchIndex];
+
+			float maxScreenEdge = 0;
+
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
+
+			float patchTessLevel = maxScreenEdge;
+			for (GLuint u = 0; u < 4; ++u)
+				for (GLuint v = 0; v < 4; ++v)
+				{
+					float &vertexTessLevel = vertexTessLevels[TeapotIndices[patchIndex][u][v]];
+					vertexTessLevel = glm::max(patchTessLevel, vertexTessLevel);
+				}
+		}
+	}
+
     void
     RenderSlefeTiles(bool showNodes)
     {
@@ -315,7 +339,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
-	RenderSlefeBoxes(const TessParams patchTessParams[])
+	RenderSlefeBoxes(const SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1])
 	{
 		vector<vec3> boxVertices;
 		vector<GLuint> boxIndices;
@@ -323,15 +347,15 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
-			const TessParams &tessParams = patchTessParams[patchIndex];
+			const SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					const TessParams::SlefeBoxes &boxes = tessParams.slefeBoxes[u][v];
+					const SlefeBox &box = slefeBoxes[u][v];
 
-					RenderAABBWireframe(boxes.worldAxisBox, boxVertices, boxIndices);
-					RenderAABBWireframe(boxes.screenAxisBox, boxVertices, screenRectIndices);
+					RenderAABBWireframe(box.worldAxisBox, boxVertices, boxIndices);
+					RenderAABBWireframe(box.screenAxisBox, boxVertices, screenRectIndices);
 				}
 		}
 
@@ -372,7 +396,7 @@ public:
 
         modelCentroid = vec3(0);
         for (GLuint i = 0; i < NumTeapotVertices; ++i)
-            modelCentroid+= vec3(TeapotVertices[i][0], TeapotVertices[i][1], 0/*TeapotVertices[i][2]*/);
+            modelCentroid+= vec3(0/*TeapotVertices[i][0]*/, TeapotVertices[i][1], 0/*TeapotVertices[i][2]*/);
         modelCentroid/= NumTeapotVertices;
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
@@ -405,7 +429,7 @@ public:
     }
 
 	void
-	ComputeTessParams(struct TessParams patchTessParams[])
+	ComputeSlefeBoxes(struct SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1])
 	{
 		int width, height;
 		glfwGetWindowSize(window.get(), &width, &height);
@@ -414,12 +438,12 @@ public:
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
 			Slefe &slefe = slefes[patchIndex];
-			TessParams &tessParams = patchTessParams[patchIndex];
+			SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					struct TessParams::SlefeBoxes &boxes = tessParams.slefeBoxes[u][v];
+					struct SlefeBox &box = slefeBoxes[u][v];
 
 					vec3 &lower = slefe.bounds[Slefe::LOWER].points[u][v];
 					vec3 &upper = slefe.bounds[Slefe::UPPER].points[u][v];
@@ -427,14 +451,14 @@ public:
 					vec3 center = (lower + upper) / vec3(2.0);
 					vec3 halfSize = (upper - lower) / vec3(2.0);
 
-					boxes.worldAxisBox.min = center - halfSize;
-					boxes.worldAxisBox.max = center + halfSize;
+					box.worldAxisBox.min = center - halfSize;
+					box.worldAxisBox.max = center + halfSize;
 
 					vec3 worldBoxVertices[8];
-					GetAABBVertices(boxes.worldAxisBox, worldBoxVertices);
+					GetAABBVertices(box.worldAxisBox, worldBoxVertices);
 
-					vec3 &screenMin = boxes.screenAxisBox.min;
-					vec3 &screenMax = boxes.screenAxisBox.max;
+					vec3 &screenMin = box.screenAxisBox.min;
+					vec3 &screenMax = box.screenAxisBox.max;
 
 					screenMin = vec3(FLT_MAX);
 					screenMax = vec3(FLT_MIN);
@@ -454,13 +478,13 @@ public:
 						screenMin.z = glm::max(screenMax.z, winVertex.z);
 					}
 
-					boxes.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
+					box.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
 				}
 		}
 	}
 
 	void
-	RenderModel(const TessParams patchTessParams[])
+	RenderModel(const float vertexTessLevels[NumTeapotPatches])
 	{
 		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
@@ -475,25 +499,8 @@ public:
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
 
-		float tessLevels[NumTeapotVertices];
-		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
-		{
-			const TessParams::SlefeBoxes (&slefeBoxes)[4][4] = patchTessParams[patchIndex].slefeBoxes;
-
-			float maxScreenEdge = 0;
-
-			for (GLuint u = 0; u <= numSlefeDivs; ++u)
-				for (GLuint v = 0; v <= numSlefeDivs; ++v)
-					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
-
-			float tessLevel = sqrt(maxScreenEdge);
-			for (GLuint u = 0; u < 4; ++u)
-				for (GLuint v = 0; v < 4; ++v)
-					tessLevels[TeapotIndices[patchIndex][u][v]] = tessLevel;
-		}
-
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_TESS_LEVELS]);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(tessLevels), tessLevels, GL_STREAM_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, NumTeapotVertices * sizeof(vertexTessLevels[0]), vertexTessLevels, GL_STREAM_DRAW);
 
 		GLint tessLevelLocation = mainProgram.GetAttribLocation("TessLevel");
 		glEnableVertexAttribArray(tessLevelLocation);
@@ -625,10 +632,26 @@ public:
 			ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
         }
 
-		struct TessParams patchTessParams[NumTeapotPatches];
-		ComputeTessParams(patchTessParams);
+	    SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1];
+		ComputeSlefeBoxes(patchSlefeBoxes);
 
-		RenderModel(patchTessParams);
+		enum {TESS_IPASS, TESS_UNIFORM};
+		static int tessMode = TESS_UNIFORM;
+		ImGui::Combo("Tessellation mode", &tessMode, "iPASS\0Uniform\0\0");
+
+	    float vertexTessLevels[NumTeapotVertices];
+		if (tessMode == TESS_UNIFORM)
+		{
+			static int uniformLevel = 9;
+			ImGui::DragInt("Level", &uniformLevel, 0.2, 1, 100);
+
+			for (GLuint i = 0; i < NumTeapotVertices; ++i)
+				vertexTessLevels[i] = uniformLevel;
+		}
+		else
+			ComputeTessLevels(patchSlefeBoxes, vertexTessLevels);
+
+		RenderModel(vertexTessLevels);
 
 		if (showControlPoints)
 			RenderControlPoints(showNodes);
@@ -637,7 +660,7 @@ public:
 		if (showSlefeTiles)
 			RenderSlefeTiles(showSlefeNodes);
 		if (showSlefeBoxes)
-			RenderSlefeBoxes(patchTessParams);
+			RenderSlefeBoxes(patchSlefeBoxes);
 
         CheckGLErrors("Render()");
     }
