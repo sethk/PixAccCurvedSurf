@@ -238,12 +238,14 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
 
+			float tessLevel = numSlefeDivs * sqrt(maxScreenEdge);
+
 			vertexTessLevels[TeapotIndices[patchIndex][0][2]] =
 					vertexTessLevels[TeapotIndices[patchIndex][2][3]] =
 					vertexTessLevels[TeapotIndices[patchIndex][3][1]] =
-					vertexTessLevels[TeapotIndices[patchIndex][1][0]] = maxScreenEdge;
+					vertexTessLevels[TeapotIndices[patchIndex][1][0]] = tessLevel;
 
-			vertexTessLevels[TeapotIndices[patchIndex][1][1]] = maxScreenEdge;
+			vertexTessLevels[TeapotIndices[patchIndex][1][1]] = tessLevel;
 		}
 	}
 
