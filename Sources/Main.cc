@@ -13,6 +13,7 @@ using std::ostringstream;
 using std::clog;
 using std::endl;
 using std::vector;
+using std::unique_ptr;
 using glm::vec4;
 using glm::vec3;
 using glm::vec2;
@@ -57,7 +58,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         NUM_BUFFERS
     };
     GLuint buffers[NUM_BUFFERS];
-	ShaderProgram mainProgram;
+	unique_ptr<ShaderProgram> mainProgram;
     ShaderProgram debugProgram;
     vec3 modelCentroid;
 	mat4 modelViewMatrix;
@@ -65,7 +66,25 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	Slefe slefes[NumTeapotPatches];
     GLint patchRange[2] = {0, NumTeapotPatches};
 	bool showModel = true;
+	bool showNormals = false;
 	bool showWireframe = false;
+
+	void
+	RebuildMainProgram()
+	{
+		mainProgram = nullptr;
+		mainProgram = unique_ptr<ShaderProgram>(new ShaderProgram());
+
+		mainProgram->LoadShader(GL_VERTEX_SHADER, "iPASS.vert");
+		mainProgram->LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
+		mainProgram->LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
+		if (showNormals)
+			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "DebugNormal.frag");
+		else
+			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "BlinnPhong.frag");
+
+		mainProgram->Link();
+	}
 
 	void
 	Set3DCamera(ShaderProgram &program)
@@ -402,12 +421,7 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
 
-		mainProgram.LoadShader(GL_VERTEX_SHADER, "iPASS.vert");
-		mainProgram.LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
-		mainProgram.LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
-		mainProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
-
-		mainProgram.Link();
+        RebuildMainProgram();
 
         glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
 
@@ -493,39 +507,34 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
 		//
 
-		mainProgram.Use();
+		mainProgram->Use();
 
-		GLint positionLocation = mainProgram.GetAttribLocation("Position");
+		GLint positionLocation = mainProgram->GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
 
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_TESS_LEVELS]);
 		glBufferData(GL_ARRAY_BUFFER, NumTeapotVertices * sizeof(vertexTessLevels[0]), vertexTessLevels, GL_STREAM_DRAW);
 
-		GLint tessLevelLocation = mainProgram.GetAttribLocation("TessLevel");
+		GLint tessLevelLocation = mainProgram->GetAttribLocation("TessLevel");
 		glEnableVertexAttribArray(tessLevelLocation);
 		glVertexAttribPointer(tessLevelLocation, 1, GL_FLOAT, GL_FALSE, 0, 0);
 
-		Set3DCamera(mainProgram);
-
-		mainProgram.SetUniform("Color", vec4(1, 1, 1, 1));
+		Set3DCamera(*mainProgram);
 
 		if (showModel)
-		{
 			glDrawElements(GL_PATCHES,
 					NumTeapotVerticesPerPatch * patchRange[1],
 					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 
-			// Use inverted color for wireframe
-			if (showWireframe)
-				mainProgram.SetUniform("Color", vec4(0, 0, 0, 1));
-		}
-
 		if (showWireframe)
 		{
+			glEnable(GL_COLOR_LOGIC_OP);
+			glLogicOp(GL_INVERT);
+
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-			static float polygonOffset[2] = {-1, 0};
+			static float polygonOffset[2] = {0, -30};
 			ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
 			glPolygonOffset(polygonOffset[0], polygonOffset[1]);
 
@@ -536,7 +545,9 @@ public:
 					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-			glEnable(GL_POLYGON_OFFSET_LINE);
+			glDisable(GL_POLYGON_OFFSET_LINE);
+
+			glDisable(GL_COLOR_LOGIC_OP);
 		}
 
 		glBindVertexArray(0);
@@ -636,7 +647,7 @@ public:
 		ComputeSlefeBoxes(patchSlefeBoxes);
 
 		enum {TESS_IPASS, TESS_UNIFORM};
-		static int tessMode = TESS_UNIFORM;
+		static int tessMode = TESS_IPASS;
 		ImGui::Combo("Tessellation mode", &tessMode, "iPASS\0Uniform\0\0");
 
 	    float vertexTessLevels[NumTeapotVertices];
@@ -650,6 +661,16 @@ public:
 		}
 		else
 			ComputeTessLevels(patchSlefeBoxes, vertexTessLevels);
+
+		if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			bool materialChanged = false;
+
+			materialChanged|= ImGui::Checkbox("Show normals", &showNormals);
+
+			if (materialChanged)
+				RebuildMainProgram();
+		}
 
 		RenderModel(vertexTessLevels);
 
