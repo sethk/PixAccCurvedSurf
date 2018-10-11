@@ -238,13 +238,12 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
 
-			float patchTessLevel = maxScreenEdge;
-			for (GLuint u = 0; u < 4; ++u)
-				for (GLuint v = 0; v < 4; ++v)
-				{
-					float &vertexTessLevel = vertexTessLevels[TeapotIndices[patchIndex][u][v]];
-					vertexTessLevel = glm::max(patchTessLevel, vertexTessLevel);
-				}
+			vertexTessLevels[TeapotIndices[patchIndex][0][2]] =
+					vertexTessLevels[TeapotIndices[patchIndex][2][3]] =
+					vertexTessLevels[TeapotIndices[patchIndex][3][1]] =
+					vertexTessLevels[TeapotIndices[patchIndex][1][0]] = maxScreenEdge;
+
+			vertexTessLevels[TeapotIndices[patchIndex][1][1]] = maxScreenEdge;
 		}
 	}
 
@@ -648,7 +647,7 @@ public:
 
 		enum {TESS_IPASS, TESS_UNIFORM};
 		static int tessMode = TESS_IPASS;
-		ImGui::Combo("Tessellation mode", &tessMode, "iPASS\0Uniform\0\0");
+		ImGui::Combo("Tess. mode", &tessMode, "iPASS\0Uniform\0\0");
 
 	    float vertexTessLevels[NumTeapotVertices];
 		if (tessMode == TESS_UNIFORM)
