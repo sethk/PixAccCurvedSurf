@@ -1,9 +1,10 @@
 #version 410 core
+layout (location = 0) out vec4 FragColor;
 
-varying vec3 Position;
-varying vec3 Normal;
+in vec3 Position;
+in vec3 Normal;
 
 void main()
 {
-	gl_FragColor = vec4((vec3(1) + Normal) * vec3(0.5), 1.0);
+	FragColor = vec4((vec3(1) + Normal) * vec3(0.5), 1.0);
 }

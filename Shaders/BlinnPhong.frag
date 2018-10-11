@@ -1,9 +1,9 @@
 #version 410 core
 layout (location = 0) out vec4 FragColor;
 
-varying vec3 Position;
-varying vec3 ViewDir;
-varying vec3 Normal;
+in vec3 Position;
+in vec3 ViewDir;
+in vec3 Normal;
 
 const vec3 LightPos = vec3(1);
 const vec3 LightColor = vec3(1);
