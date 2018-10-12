@@ -213,8 +213,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						coeff[u][v][dim] = vertex[dim];
 				}
 
-			REAL lower[numSlefeDivs + 1][numSlefeDivs + 1][3];
-			REAL upper[numSlefeDivs + 1][numSlefeDivs + 1][3];
+			REAL lower[numSlefeDivs + 1][numSlefeDivs + 1][threeD];
+			REAL upper[numSlefeDivs + 1][numSlefeDivs + 1][threeD];
 
 			for (GLuint dim = 0; dim < threeD; ++dim)
 				tpSlefe(coeff[0][0] + dim, sizeof(coeff[0]) / sizeof(REAL), sizeof(coeff[0][0]) / sizeof(REAL),
@@ -260,15 +260,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 					for (GLuint uOff = 0; uOff < 2; ++uOff)
 						for (GLuint vOff = 0; vOff < 2; ++vOff)
-						{
-							tileBox.min.x = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.x, tileBox.min.x);
-							tileBox.min.y = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.y, tileBox.min.y);
-							tileBox.min.z = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.z, tileBox.min.z);
-
-							tileBox.max.x = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.x, tileBox.max.x);
-							tileBox.max.y = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.y, tileBox.max.y);
-							tileBox.max.z = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.z, tileBox.max.z);
-						}
+							for (GLuint dim = 0; dim < threeD; ++dim)
+							{
+								tileBox.min[dim] = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min[dim],
+										tileBox.min[dim]);
+								tileBox.max[dim] = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max[dim],
+										tileBox.max[dim]);
+							}
 
 					if (tileBox.min.x > screenWidth || tileBox.min.y > screenHeight || tileBox.min.z > 1 ||
 							tileBox.max.x < 0 || tileBox.max.y < 0 || tileBox.max.z < 0)
@@ -559,12 +557,11 @@ public:
 						vec3 normVertex = vec3(clipVertex[0], clipVertex[1], clipVertex[2]) / vec3(clipVertex.w);
 						vec3 winVertex = halfWindowSize + normVertex * halfWindowSize;
 
-						screenMin.x = glm::min(screenMin.x, winVertex.x);
-						screenMin.y = glm::min(screenMin.y, winVertex.y);
-						screenMin.z = glm::min(screenMin.z, winVertex.z);
-						screenMax.x = glm::max(screenMax.x, winVertex.x);
-						screenMax.y = glm::max(screenMax.y, winVertex.y);
-						screenMax.z = glm::max(screenMax.z, winVertex.z);
+						for (GLuint dim = 0; dim < threeD; ++dim)
+						{
+							screenMin[dim] = glm::min(screenMin[dim], winVertex[dim]);
+							screenMax[dim] = glm::max(screenMax[dim], winVertex[dim]);
+						}
 					}
 
 					box.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
