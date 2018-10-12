@@ -532,7 +532,8 @@ public:
 		{
 			mainProgram->SetUniform("AmbientIntensity", ambientIntensity);
 			mainProgram->SetUniform("DiffuseColor", diffuseColor);
-			mainProgram->SetUniform("LightPosition", lightPosition);
+			vec3 worldLightPos = vec3(modelViewMatrix * vec4(lightPosition, 1));
+			mainProgram->SetUniform("LightPosition", worldLightPos);
 			mainProgram->SetUniform("LightIntensity", lightIntensity);
 			mainProgram->SetUniform("Shininess", shininess);
 		}
@@ -635,7 +636,7 @@ public:
 		bool showNodes = false;
         if (ImGui::CollapsingHeader("Model", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -1, 1, "%.2f");
+            ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -10, 10, "%.2f");
             if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
             {
                 patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);

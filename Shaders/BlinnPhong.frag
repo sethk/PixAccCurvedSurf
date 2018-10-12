@@ -2,7 +2,6 @@
 layout (location = 0) out vec4 FragColor;
 
 in vec3 WorldPosition;
-in vec3 ViewDir;
 in vec3 Normal;
 
 uniform float AmbientIntensity;
@@ -16,7 +15,7 @@ main()
 {
 	vec3 normal = normalize(Normal);
 	vec3 lightDir = normalize(LightPosition - WorldPosition);
-	vec3 viewDir = normalize(ViewDir);
+	vec3 viewDir = normalize(-WorldPosition);
 
 	float diffuse = max(dot(lightDir, normal), 0);
 

@@ -4,7 +4,6 @@ layout (quads, equal_spacing, ccw) in;
 out vec2 TexCoord;
 out vec3 WorldPosition;
 out vec3 Normal;
-out vec3 ViewDir;
 
 uniform mat4 ProjectionMatrix;
 
@@ -48,5 +47,4 @@ main()
 	Normal = cross(vc[1].xyz - vc[0].xyz, uc[1].xyz - uc[0].xyz);
 
 	gl_Position = ProjectionMatrix * vec4(WorldPosition, 1);
-	ViewDir = vec3(0, 0, 1);
 }
