@@ -233,21 +233,52 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
-	ComputeTessLevels(const SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1],
-	                  float vertexTessLevels[NumTeapotVertices])
+	ComputeTessLevels(float vertexTessLevels[NumTeapotVertices])
 	{
+		bool levelsOpen = false;
+		if (showDebugWindow)
+			levelsOpen = ImGui::TreeNode("Tess levels");
+
 		for (GLuint i = 0; i < NumTeapotVertices; ++i)
 			vertexTessLevels[i] = 0;
 
+		int screenWidth, screenHeight;
+		glfwGetWindowSize(window.get(), &screenWidth, &screenHeight);
+
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
+			bool patchOpen = (levelsOpen && ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str()));
+
 			const SlefeBox (&slefeBoxes)[4][4] = patchSlefeBoxes[patchIndex];
 
 			float maxScreenEdge = 0;
 
-			for (GLuint u = 0; u <= numSlefeDivs; ++u)
-				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+			for (GLuint u = 0; u < numSlefeDivs; ++u)
+				for (GLuint v = 0; v < numSlefeDivs; ++v)
+				{
+					AABB tileBox = {vec3(INFINITY), vec3(-INFINITY)};
+
+					for (GLuint uOff = 0; uOff < 2; ++uOff)
+						for (GLuint vOff = 0; vOff < 2; ++vOff)
+						{
+							tileBox.min.x = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.x, tileBox.min.x);
+							tileBox.min.y = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.y, tileBox.min.y);
+							tileBox.min.z = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min.z, tileBox.min.z);
+
+							tileBox.max.x = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.x, tileBox.max.x);
+							tileBox.max.y = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.y, tileBox.max.y);
+							tileBox.max.z = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max.z, tileBox.max.z);
+						}
+
+					if (tileBox.min.x > screenWidth || tileBox.min.y > screenHeight || tileBox.min.z > 1 ||
+							tileBox.max.x < 0 || tileBox.max.y < 0 || tileBox.max.z < 0)
+						continue;
+
+					if (patchOpen)
+						ImGui::Text("Tile[%u][%u].maxScreenEdge = %.2f", u, v, slefeBoxes[u][v].maxScreenEdge);
+
 					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
+				}
 
 			float tessLevel = numSlefeDivs * sqrt(maxScreenEdge);
 
@@ -257,7 +288,16 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 					vertexTessLevels[TeapotIndices[patchIndex][1][0]] = tessLevel;
 
 			vertexTessLevels[TeapotIndices[patchIndex][1][1]] = tessLevel;
+
+			if (patchOpen)
+			{
+				ImGui::Text("Tess level = %.2f", tessLevel);
+				ImGui::TreePop();
+			}
 		}
+
+		if (levelsOpen)
+			ImGui::TreePop();
 	}
 
     void
@@ -368,14 +408,27 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
+	DebugAABB(const char *name, GLuint u, GLuint v, const AABB &box)
+	{
+		ImGui::Text("%s[%u][%u]: { %.2f %.2f %.2f } - { %.2f %.2f %.2f }",
+				name, u, v, box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z);
+	}
+
+	void
 	RenderSlefeBoxes()
 	{
+		bool slefeNodesOpen = (showDebugWindow && ImGui::TreeNode("Slefe boxes"));
+
 		vector<vec3> boxVertices;
 		vector<GLuint> boxIndices;
 		vector<GLuint> screenRectIndices;
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
+			bool patchOpen = false;
+			if (slefeNodesOpen)
+				patchOpen = ImGui::TreeNode((string("Slefe box ") + std::to_string(patchIndex)).c_str());
+
 			const SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
@@ -383,9 +436,18 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				{
 					const SlefeBox &box = slefeBoxes[u][v];
 
+					if (patchOpen)
+					{
+						DebugAABB("worldAxisBox", u, v, box.worldAxisBox);
+						DebugAABB("screenAxisBox", u, v, box.screenAxisBox);
+					}
+
 					RenderAABBWireframe(box.worldAxisBox, boxVertices, boxIndices);
 					RenderAABBWireframe(box.screenAxisBox, boxVertices, screenRectIndices);
 				}
+
+			if (patchOpen)
+				ImGui::TreePop();
 		}
 
 		debugProgram.Use();
@@ -408,6 +470,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		debugProgram.SetCamera(identity, screenSpace);
 
 		RenderDebugPrimitives(GL_LINES, 0.5, 0.5, 1, screenRectIndices);
+
+		if (slefeNodesOpen)
+			ImGui::TreePop();
 
 		CheckGLErrors("RenderSlefeBoxes()");
 	}
@@ -484,8 +549,8 @@ public:
 					vec3 &screenMin = box.screenAxisBox.min;
 					vec3 &screenMax = box.screenAxisBox.max;
 
-					screenMin = vec3(FLT_MAX);
-					screenMax = vec3(FLT_MIN);
+					screenMin = vec3(INFINITY);
+					screenMax = vec3(-INFINITY);
 
 					for (GLuint i = 0; i < 8; ++i)
 					{
@@ -499,7 +564,7 @@ public:
 						screenMin.z = glm::min(screenMin.z, winVertex.z);
 						screenMax.x = glm::max(screenMax.x, winVertex.x);
 						screenMax.y = glm::max(screenMax.y, winVertex.y);
-						screenMin.z = glm::max(screenMax.z, winVertex.z);
+						screenMax.z = glm::max(screenMax.z, winVertex.z);
 					}
 
 					box.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
