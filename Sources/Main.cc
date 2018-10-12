@@ -67,6 +67,11 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLint patchRange[2] = {0, NumTeapotPatches};
 	bool showModel = true;
 	bool showNormals = false;
+	float ambientIntensity = 0.1;
+	vec3 diffuseColor = vec3(0.5, 0, 0);
+	vec3 lightPosition = vec3(10);
+	float lightIntensity = 1;
+	float shininess = 32;
 	bool showWireframe = false;
 
 	void
@@ -523,6 +528,15 @@ public:
 
 		Set3DCamera(*mainProgram);
 
+		if (!showNormals)
+		{
+			mainProgram->SetUniform("AmbientIntensity", ambientIntensity);
+			mainProgram->SetUniform("DiffuseColor", diffuseColor);
+			mainProgram->SetUniform("LightPosition", lightPosition);
+			mainProgram->SetUniform("LightIntensity", lightIntensity);
+			mainProgram->SetUniform("Shininess", shininess);
+		}
+
 		if (showModel)
 			glDrawElements(GL_PATCHES,
 					NumTeapotVerticesPerPatch * patchRange[1],
@@ -668,6 +682,12 @@ public:
 			bool materialChanged = false;
 
 			materialChanged|= ImGui::Checkbox("Show normals", &showNormals);
+
+			ImGui::SliderFloat("Ambient", &ambientIntensity, 0, 1);
+			ImGui::ColorEdit3("Diffuse col.", value_ptr(diffuseColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::DragFloat3("Light pos.", value_ptr(lightPosition), 0.1, -100, 100);
+			ImGui::SliderFloat("Intensity", &lightIntensity, 0, 1);
+			ImGui::SliderFloat("Shininess", &shininess, 4, 120);
 
 			if (materialChanged)
 				RebuildMainProgram();

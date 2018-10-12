@@ -99,9 +99,23 @@ public:
     }
 
 	void
+	SetUniform(const char *name, float f)
+	{
+		GLint location = GetUniformLocation(name);
+		glUniform1f(location, f);
+	}
+
+	void
+	SetUniform(const char *name, const glm::vec3 &v)
+	{
+		GLint location = GetUniformLocation(name);
+		glUniform3fv(location, 1, value_ptr(v));
+	}
+
+	void
 	SetUniform(const char *name, const glm::vec4 &v)
 	{
-		GLint location = GetUniformLocation(name, true);
+		GLint location = GetUniformLocation(name);
 		glUniform4fv(location, 1, value_ptr(v));
 	}
 
