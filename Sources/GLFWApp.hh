@@ -229,6 +229,7 @@ protected:
 	std::unique_ptr<GLFWwindow, void (*)(GLFWwindow *)> window;
 	bool useImGuiInput = true;
 	bool renderImGui = true;
+	bool showDebugWindow = false;
 	bool showImGuiDemo = false;
 
 	static void
@@ -316,7 +317,7 @@ public:
 			glfwPollEvents();
 
 			if (ImGui::IsKeyPressed(GLFW_KEY_GRAVE_ACCENT, false))
-				showImGuiDemo = !showImGuiDemo;
+				showDebugWindow = !showDebugWindow;
 
 			if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 				glfwSetWindowShouldClose(window.get(), 1);
@@ -324,6 +325,15 @@ public:
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
+
+			if (showDebugWindow)
+			{
+				ImWindow window("Debug##Default", &showDebugWindow);
+				if (window)
+				{
+					ImGui::Checkbox("Show demo window", &showImGuiDemo);
+				}
+			}
 
 			if (showImGuiDemo)
 				ImGui::ShowDemoWindow(&showImGuiDemo);
