@@ -13,7 +13,7 @@ uniform float Shininess;
 void
 main()
 {
-	vec3 normal = normalize(Normal);
+	vec3 normal = (gl_FrontFacing) ? normalize(Normal) : normalize(-Normal);
 	vec3 lightDir = normalize(LightPosition - WorldPosition);
 	vec3 viewDir = normalize(-WorldPosition);
 

@@ -71,6 +71,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
     GLint patchRange[2] = {0, NumTeapotPatches};
 	bool showModel = true;
 	bool showWireframe = false;
+	bool twoSided = true;
 	bool showNormals = false;
 	float ambientIntensity = 0.1;
 	vec3 diffuseColor = vec3(0.5, 0, 0);
@@ -574,10 +575,8 @@ public:
 	{
 		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
-		//
         glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
-		//
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
 
 		mainProgram->Use();
 
@@ -593,6 +592,9 @@ public:
 		glVertexAttribPointer(tessLevelLocation, 1, GL_FLOAT, GL_FALSE, 0, 0);
 
 		Set3DCamera(*mainProgram);
+
+		if (!twoSided)
+			glEnable(GL_CULL_FACE);
 
 		if (!showNormals)
 		{
@@ -632,6 +634,9 @@ public:
 
 			glDisable(GL_COLOR_LOGIC_OP);
 		}
+
+		if (!twoSided)
+			glDisable(GL_CULL_FACE);
 
 		glBindVertexArray(0);
 	}
@@ -730,6 +735,8 @@ public:
 		{
 			bool materialChanged = false;
 
+			ImGui::Checkbox("Two sided", &twoSided);
+			ImGui::SameLine();
 			materialChanged|= ImGui::Checkbox("Show normals", &showNormals);
 
 			ImGui::SliderFloat("Ambient", &ambientIntensity, 0, 1);
