@@ -24,6 +24,8 @@ using glm::value_ptr;
 
 static const GLuint threeD = 3;
 static const GLuint numSlefeDivs = 3;
+static const float minCameraZ = 0.1f;
+static const float maxCameraZ = 100.0f;
 
 struct Slefe
 {
@@ -88,7 +90,11 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	// Material
 	bool twoSided = true;
 	bool showNormals = false;
-	vec3 diffuseColor = vec3(0.5, 0, 0);
+	vec3 diffuseColor1 = vec3(0.5, 0, 0);
+	vec3 diffuseColor2 = vec3(0);
+	GLuint texture;
+	bool useTexture = true;
+	GLint textureRepeat = 5;
 	float shininess = 32;
 
 	// Debug
@@ -121,6 +127,19 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "BlinnPhong.frag");
 
 		mainProgram->Link();
+	}
+
+	void
+	UpdateTexture()
+	{
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		vec3 checker[2][2] = {{diffuseColor1, diffuseColor2}, {diffuseColor2, diffuseColor1}};
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_FLOAT, checker);
+		//glGenerateMipmap(GL_TEXTURE_2D);
+
+		CheckGLErrors("UpdateTexture()");
 	}
 
 	void
@@ -564,8 +583,18 @@ public:
 
 		glEnable(GL_DEPTH_TEST);
 
+		glGenTextures(1, &texture);
+		UpdateTexture();
+
         CheckGLErrors("PixAccCurvedSurf()");
     }
+
+	~PixAccCurvedSurf()
+	{
+		glDeleteTextures(1, &texture);
+
+		CheckGLErrors("~PixAccCurvedSurf()");
+	}
 
 	void
 	ComputeSlefeBoxes()
@@ -650,7 +679,7 @@ public:
 		if (!showNormals)
 		{
 			mainProgram->SetUniform("AmbientIntensity", ambientIntensity);
-			mainProgram->SetUniform("DiffuseColor", diffuseColor);
+			mainProgram->SetUniform("TextureRepeat", textureRepeat);
 			vec3 worldLightPos = vec3(modelViewMatrix * vec4(lightPosition, 1));
 			mainProgram->SetUniform("LightPosition", worldLightPos);
 			mainProgram->SetUniform("LightIntensity", lightIntensity);
@@ -767,7 +796,7 @@ public:
         glfwGetWindowSize(window.get(), &width, &height);
 		float aspect = float(width) / float(height);
         if (perspective)
-            projectionMatrix = glm::perspective(glm::radians(fov), aspect, 0.1f, 100.0f);
+            projectionMatrix = glm::perspective(glm::radians(fov), aspect, minCameraZ, maxCameraZ);
         else
             projectionMatrix = glm::ortho(-3.0f * aspect, 3.0f * aspect, -3.0f, 3.0f, -10.0f, 10.0f);
 
@@ -792,7 +821,7 @@ public:
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			ImGui::ColorEdit3("Background", value_ptr(backgroundColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit3("Background color", value_ptr(backgroundColor), ImGuiColorEditFlags_NoInputs);
 			ImGui::SliderFloat("Ambient", &ambientIntensity, 0, 1);
 			ImGui::DragFloat3("Light pos.", value_ptr(lightPosition), 0.1, -100, 100);
 			ImGui::SliderFloat("Intensity", &lightIntensity, 0, 1);
@@ -806,7 +835,20 @@ public:
 			ImGui::SameLine();
 			materialChanged|= ImGui::Checkbox("Show normals", &showNormals);
 
-			ImGui::ColorEdit3("Diffuse col.", value_ptr(diffuseColor), ImGuiColorEditFlags_NoInputs);
+			bool textureChanged = false;
+			textureChanged|= ImGui::ColorEdit3("Diffuse color", value_ptr(diffuseColor1), ImGuiColorEditFlags_NoInputs);
+			textureChanged|= ImGui::Checkbox("Checker", &useTexture);
+			if (useTexture)
+			{
+				textureChanged|= ImGui::ColorEdit3("Checker color",
+						value_ptr(diffuseColor2),
+						ImGuiColorEditFlags_NoInputs);
+				ImGui::SliderInt("Repeat", &textureRepeat, 1, 25);
+			}
+
+			if (textureChanged)
+				UpdateTexture();
+
 			ImGui::SliderFloat("Shininess", &shininess, 4, 120);
 
 			if (materialChanged)

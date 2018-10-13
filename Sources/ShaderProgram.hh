@@ -99,6 +99,13 @@ public:
     }
 
 	void
+	SetUniform(const char *name, GLint i)
+	{
+		GLint location = GetUniformLocation(name);
+		glUniform1i(location, i);
+	}
+
+	void
 	SetUniform(const char *name, float f)
 	{
 		GLint location = GetUniformLocation(name);
