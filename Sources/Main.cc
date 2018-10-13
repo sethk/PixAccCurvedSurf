@@ -46,6 +46,7 @@ struct SlefeBox
 
 class PixAccCurvedSurf : public GLFWWindowedApp
 {
+	// Model data
     enum {VERTEX_ARRAY_TEAPOT, VERTEX_ARRAY_DEBUG, NUM_VERTEX_ARRAYS};
     GLuint vertexArrayObjects[NUM_VERTEX_ARRAYS];
     enum
@@ -58,30 +59,50 @@ class PixAccCurvedSurf : public GLFWWindowedApp
         NUM_BUFFERS
     };
     GLuint buffers[NUM_BUFFERS];
+    vec3 modelCentroid;
+    GLint patchRange[2] = {0, NumTeapotPatches};
+
+	// Shaders
 	unique_ptr<ShaderProgram> mainProgram;
     ShaderProgram debugProgram;
-    vec3 modelCentroid;
+
+	// Camera
 	mat4 modelViewMatrix;
 	mat4 projectionMatrix;
+
+	// Tessellation
 	enum {TESS_IPASS, TESS_UNIFORM};
 	int tessMode = TESS_IPASS;
 	int uniformLevel = 9;
 	Slefe slefes[NumTeapotPatches];
 	SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1];
-    GLint patchRange[2] = {0, NumTeapotPatches};
-	bool showModel = true;
-	bool showWireframe = false;
-	bool twoSided = true;
-	bool showNormals = false;
+
+	// Scene
+	vec3 backgroundColor = vec3(24 / 255.0);
 	float ambientIntensity = 0.1;
-	vec3 diffuseColor = vec3(0.5, 0, 0);
 	vec3 lightPosition = vec3(10);
 	float lightIntensity = 1;
+
+	// Material
+	bool twoSided = true;
+	bool showNormals = false;
+	vec3 diffuseColor = vec3(0.5, 0, 0);
 	float shininess = 32;
+
+	// Debug
+	bool showModel = true;
+	bool showWireframe = false;
 	bool showControlPoints = false;
+	vec3 anchorPointColor = vec3(1, 0, 0);
+	vec3 controlPointColor = vec3(0, 1, 0);
 	bool showControlMeshes = false;
+	vec3 controlMeshColor = vec3(0.7, 0.7, 0.7);
 	bool showSlefeTiles = false;
+	vec3 slefeTileColor = vec3(0.936, 1, 0.502);
 	bool showSlefeBoxes = false;
+	vec3 slefeBoxColor = vec3(0.5, 1, 0.5);
+	bool showScreenRects = false;
+	vec3 slefeRectColor = vec3(0.5, 0.5, 1);
 
 	void
 	RebuildMainProgram()
@@ -107,14 +128,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
-	RenderDebugPrimitives(GLenum type, GLfloat r, GLfloat g, GLfloat b, const vector<GLuint> &indices)
+	RenderDebugPrimitives(GLenum type, const vec3 &color, const vector<GLuint> &indices)
 	{
 		GLint positionLocation = debugProgram.GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
 
-		GLint colorLocation = debugProgram.GetUniformLocation("Color");
-		glUniform4f(colorLocation, r, g, b, 1);
+		debugProgram.SetUniform("Color", color);
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STREAM_DRAW);
@@ -168,9 +188,15 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		Set3DCamera(debugProgram);
 
+		if (showDebugWindow)
+		{
+			ImGui::ColorEdit3("Anchor point color", value_ptr(anchorPointColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit3("Control point color", value_ptr(controlPointColor), ImGuiColorEditFlags_NoInputs);
+		}
+
 		glPointSize(5);
-		RenderDebugPrimitives(GL_POINTS, 1, 1, 1, anchorIndices);
-		RenderDebugPrimitives(GL_POINTS, 1, 0, 0, controlIndices);
+		RenderDebugPrimitives(GL_POINTS, anchorPointColor, anchorIndices);
+		RenderDebugPrimitives(GL_POINTS, controlPointColor, controlIndices);
 	}
 
 	void
@@ -197,7 +223,10 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		Set3DCamera(debugProgram);
 
-		RenderDebugPrimitives(GL_LINES, 0.6, 0.6, 0.6, indices);
+		if (showDebugWindow)
+			ImGui::ColorEdit3("Control mesh color", value_ptr(controlMeshColor), ImGuiColorEditFlags_NoInputs);
+
+		RenderDebugPrimitives(GL_LINES, controlMeshColor, indices);
 	}
 
 	void
@@ -367,7 +396,11 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glBufferData(GL_ARRAY_BUFFER, sizeof(slefes), slefes, GL_STREAM_DRAW);
 
 		Set3DCamera(debugProgram);
-		RenderDebugPrimitives(GL_LINES, 0, 1, 1, slefeIndices);
+
+		if (showDebugWindow)
+			ImGui::ColorEdit3("Slefe tile color", value_ptr(slefeTileColor), ImGuiColorEditFlags_NoInputs);
+
+		RenderDebugPrimitives(GL_LINES, slefeTileColor, slefeIndices);
 
 		if (patchesOpen)
 			ImGui::TreePop();
@@ -441,37 +474,52 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 						DebugAABB("screenAxisBox", u, v, box.screenAxisBox);
 					}
 
-					RenderAABBWireframe(box.worldAxisBox, boxVertices, boxIndices);
-					RenderAABBWireframe(box.screenAxisBox, boxVertices, screenRectIndices);
+					if (showSlefeBoxes)
+						RenderAABBWireframe(box.worldAxisBox, boxVertices, boxIndices);
+
+					if (showScreenRects)
+						RenderAABBWireframe(box.screenAxisBox, boxVertices, screenRectIndices);
 				}
 
 			if (patchOpen)
 				ImGui::TreePop();
 		}
 
-		debugProgram.Use();
-
-		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
-
-		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
-		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
-
-		Set3DCamera(debugProgram);
-
-		RenderDebugPrimitives(GL_LINES, 1, 0, 1, boxIndices);
-
-		mat4 identity(1);
-
-		int width, height;
-		glfwGetWindowSize(window.get(), &width, &height);
-		mat4 screenSpace = glm::ortho(0.0f, float(width), 0.0f, float(height), -1.0f, 1.0f);
-
-		debugProgram.SetCamera(identity, screenSpace);
-
-		RenderDebugPrimitives(GL_LINES, 0.5, 0.5, 1, screenRectIndices);
-
 		if (slefeNodesOpen)
 			ImGui::TreePop();
+
+		debugProgram.Use();
+
+		if (showSlefeBoxes)
+		{
+			glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+
+			glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
+			glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
+
+			Set3DCamera(debugProgram);
+
+			if (showDebugWindow)
+				ImGui::ColorEdit3("Slefe box color", value_ptr(slefeBoxColor), ImGuiColorEditFlags_NoInputs);
+
+			RenderDebugPrimitives(GL_LINES, slefeBoxColor, boxIndices);
+		}
+
+		if (showScreenRects)
+		{
+			mat4 identity(1);
+
+			int width, height;
+			glfwGetWindowSize(window.get(), &width, &height);
+			mat4 screenSpace = glm::ortho(0.0f, float(width), 0.0f, float(height), -minCameraZ, -maxCameraZ);
+
+			debugProgram.SetCamera(identity, screenSpace);
+
+			if (showDebugWindow)
+				ImGui::ColorEdit3("Slefe rect color", value_ptr(slefeRectColor), ImGuiColorEditFlags_NoInputs);
+
+			RenderDebugPrimitives(GL_LINES, slefeRectColor, screenRectIndices);
+		}
 
 		CheckGLErrors("RenderSlefeBoxes()");
 	}
@@ -503,8 +551,6 @@ public:
         debugProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
 
 		debugProgram.Link();
-
-        glClearColor(0, 0, 0, 1);
 
         setenv("SUBLIMEPATH", ".", false);
         InitBounds();
@@ -613,26 +659,33 @@ public:
 
 		if (showWireframe)
 		{
-			glEnable(GL_COLOR_LOGIC_OP);
-			glLogicOp(GL_INVERT);
+			if (showModel)
+			{
+				glEnable(GL_COLOR_LOGIC_OP);
+				glLogicOp(GL_INVERT);
+
+				static float polygonOffset[2] = {0, -30};
+				if (showDebugWindow)
+					ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
+				glPolygonOffset(polygonOffset[0], polygonOffset[1]);
+
+				glEnable(GL_POLYGON_OFFSET_LINE);
+			}
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-			static float polygonOffset[2] = {0, -30};
-			if (showDebugWindow)
-				ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
-			glPolygonOffset(polygonOffset[0], polygonOffset[1]);
-
-			glEnable(GL_POLYGON_OFFSET_LINE);
 
 			glDrawElements(GL_PATCHES,
 					NumTeapotVerticesPerPatch * patchRange[1],
 					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-			glDisable(GL_POLYGON_OFFSET_LINE);
 
-			glDisable(GL_COLOR_LOGIC_OP);
+			if (showModel)
+			{
+				glDisable(GL_POLYGON_OFFSET_LINE);
+
+				glDisable(GL_COLOR_LOGIC_OP);
+			}
 		}
 
 		if (!twoSided)
@@ -731,6 +784,14 @@ public:
 
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
 
+		if (ImGui::CollapsingHeader("Scene"))
+		{
+			ImGui::ColorEdit3("Background", value_ptr(backgroundColor), ImGuiColorEditFlags_NoInputs);
+			ImGui::SliderFloat("Ambient", &ambientIntensity, 0, 1);
+			ImGui::DragFloat3("Light pos.", value_ptr(lightPosition), 0.1, -100, 100);
+			ImGui::SliderFloat("Intensity", &lightIntensity, 0, 1);
+		}
+
 		if (ImGui::CollapsingHeader("Material"))
 		{
 			bool materialChanged = false;
@@ -739,10 +800,7 @@ public:
 			ImGui::SameLine();
 			materialChanged|= ImGui::Checkbox("Show normals", &showNormals);
 
-			ImGui::SliderFloat("Ambient", &ambientIntensity, 0, 1);
 			ImGui::ColorEdit3("Diffuse col.", value_ptr(diffuseColor), ImGuiColorEditFlags_NoInputs);
-			ImGui::DragFloat3("Light pos.", value_ptr(lightPosition), 0.1, -100, 100);
-			ImGui::SliderFloat("Intensity", &lightIntensity, 0, 1);
 			ImGui::SliderFloat("Shininess", &shininess, 4, 120);
 
 			if (materialChanged)
@@ -753,9 +811,11 @@ public:
     virtual void
     Render(double /*time*/)
     {
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 		RenderUI();
+
+        glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, 1);
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	    float vertexTessLevels[NumTeapotVertices];
 		if (tessMode == TESS_IPASS)
@@ -775,7 +835,7 @@ public:
 			RenderControlMeshes();
 		if (showSlefeTiles)
 			RenderSlefeTiles();
-		if (showSlefeBoxes)
+		if (showSlefeBoxes || showScreenRects)
 			RenderSlefeBoxes();
 
         CheckGLErrors("Render()");
