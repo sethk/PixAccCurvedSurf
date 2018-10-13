@@ -206,6 +206,8 @@ public:
 			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 			glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 		#endif // __APPLE__
+
+		glfwWindowHint(GLFW_SAMPLES, 8);
 	}
 
 	~GLFWApp() { glfwTerminate(); }

@@ -73,6 +73,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	// Camera
 	mat4 modelViewMatrix;
 	mat4 projectionMatrix;
+	GLint numSampleBuffers;
+	bool useMultiSampling = true;
 
 	// Tessellation
 	enum {TESS_IPASS, TESS_UNIFORM};
@@ -138,7 +140,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		vec3 checker[2][2] = {{diffuseColor1, diffuseColor2}, {diffuseColor2, diffuseColor1}};
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_FLOAT, checker);
+		GLuint textureSize = (useTexture) ? 2 : 1;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, textureSize, textureSize, 0, GL_RGB, GL_FLOAT, checker);
 
 		CheckGLErrors("UpdateTexture()");
 	}
@@ -161,7 +164,20 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_DEBUG_INDICES]);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STREAM_DRAW);
 
+		if (type == GL_LINES && !useMultiSampling)
+		{
+			glEnable(GL_LINE_SMOOTH);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glEnable(GL_BLEND);
+		}
+
 		glDrawElements(type, indices.size(), GL_UNSIGNED_INT, 0);
+
+		if (type == GL_LINES && !useMultiSampling)
+		{
+			glDisable(GL_LINE_SMOOTH);
+			glDisable(GL_BLEND);
+		}
 
         CheckGLErrors("RenderDebugPrimitives()");
 	}
@@ -582,6 +598,10 @@ public:
 
 		ComputeSlefes();
 
+		glGetIntegerv(GL_SAMPLES, &numSampleBuffers);
+
+		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
 		glEnable(GL_DEPTH_TEST);
 
 		glGenTextures(1, &texture);
@@ -794,6 +814,8 @@ public:
             ImGui::Checkbox("Perspective", &perspective);
             if (perspective)
                 ImGui::DragFloat("FOV", &fov, 1, 30, 120);
+			if (numSampleBuffers > 1)
+				ImGui::Checkbox((std::to_string(numSampleBuffers) + "x MSAA").c_str(), &useMultiSampling);
         }
 		while (cameraParams[0] <= -180)
 			cameraParams[0]+= 360;
@@ -812,6 +834,11 @@ public:
             projectionMatrix = glm::perspective(glm::radians(fov), aspect, minCameraZ, maxCameraZ);
         else
             projectionMatrix = glm::ortho(-3.0f * aspect, 3.0f * aspect, -3.0f, 3.0f, -10.0f, 10.0f);
+
+		if (useMultiSampling)
+			glEnable(GL_MULTISAMPLE);
+		else
+			glDisable(GL_MULTISAMPLE);
 
         static vec3 modelPos;
         if (ImGui::CollapsingHeader("Model"))
@@ -889,11 +916,14 @@ public:
 		{
 			ImGui::Text("%.1f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-			GLint numTriangles;
-			glGetQueryObjectiv(queries[QUERY_TRIANGLES], GL_QUERY_RESULT, &numTriangles);
-			GLint numFragments;
-			glGetQueryObjectiv(queries[QUERY_FRAGMENTS], GL_QUERY_RESULT, &numFragments);
-			ImGui::Text("%'i triangles, %'i fragments", numTriangles, numFragments);
+			if (showModel)
+			{
+				GLint numTriangles;
+				glGetQueryObjectiv(queries[QUERY_TRIANGLES], GL_QUERY_RESULT, &numTriangles);
+				GLint numFragments;
+				glGetQueryObjectiv(queries[QUERY_FRAGMENTS], GL_QUERY_RESULT, &numFragments);
+				ImGui::Text("%'i triangles, %'i fragments", numTriangles, numFragments);
+			}
 		}
 	}
 
