@@ -2,8 +2,6 @@
 layout (vertices = 16) out;
 in float PatchTessLevels[];
 
-uniform mat4 ModelViewMatrix;
-
 void
 main()
 {
@@ -17,5 +15,5 @@ main()
 		gl_TessLevelInner[0] = gl_TessLevelInner[1] = PatchTessLevels[5];
 	}
 
-	gl_out[gl_InvocationID].gl_Position = ModelViewMatrix * gl_in[gl_InvocationID].gl_Position;
+	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
 }
