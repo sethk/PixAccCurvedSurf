@@ -20,6 +20,8 @@ using glm::vec2;
 using glm::mat4;
 using glm::value_ptr;
 
+#define TESS_LEVEL_CEIL 1 // round up fractional tess. levels
+
 static const GLuint threeD = 3;
 static const GLuint numSlefeDivs = 3;
 
@@ -309,6 +311,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				}
 
 			float tessLevel = numSlefeDivs * sqrt(maxScreenEdge);
+			#if TESS_LEVEL_CEIL
+				tessLevel = ceilf(tessLevel);
+			#endif // TESS_LEVEL_CEIL
 
 			vertexTessLevels[TeapotIndices[patchIndex][0][2]] =
 					vertexTessLevels[TeapotIndices[patchIndex][2][3]] =
