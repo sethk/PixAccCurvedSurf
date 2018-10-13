@@ -77,7 +77,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	// Tessellation
 	enum {TESS_IPASS, TESS_UNIFORM};
 	int tessMode = TESS_IPASS;
-	int uniformLevel = 9;
+	int uniformLevel = 11;
 	Slefe slefes[NumTeapotPatches];
 	SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1];
 
@@ -98,6 +98,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	float shininess = 32;
 
 	// Debug
+	enum {QUERY_TRIANGLES, QUERY_FRAGMENTS, NUM_QUERIES};
+	GLuint queries[NUM_QUERIES];
 	bool showModel = true;
 	bool showWireframe = false;
 	bool showControlPoints = false;
@@ -137,7 +139,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		vec3 checker[2][2] = {{diffuseColor1, diffuseColor2}, {diffuseColor2, diffuseColor1}};
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 2, 2, 0, GL_RGB, GL_FLOAT, checker);
-		//glGenerateMipmap(GL_TEXTURE_2D);
 
 		CheckGLErrors("UpdateTexture()");
 	}
@@ -586,12 +587,16 @@ public:
 		glGenTextures(1, &texture);
 		UpdateTexture();
 
+		glGenQueries(NUM_QUERIES, queries);
+
         CheckGLErrors("PixAccCurvedSurf()");
     }
 
 	~PixAccCurvedSurf()
 	{
 		glDeleteTextures(1, &texture);
+
+		glDeleteQueries(NUM_QUERIES, queries);
 
 		CheckGLErrors("~PixAccCurvedSurf()");
 	}
@@ -687,9 +692,17 @@ public:
 		}
 
 		if (showModel)
+		{
+			glBeginQuery(GL_PRIMITIVES_GENERATED, queries[QUERY_TRIANGLES]);
+			glBeginQuery(GL_SAMPLES_PASSED, queries[QUERY_FRAGMENTS]);
+
 			glDrawElements(GL_PATCHES,
 					NumTeapotVerticesPerPatch * patchRange[1],
 					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+
+			glEndQuery(GL_PRIMITIVES_GENERATED);
+			glEndQuery(GL_SAMPLES_PASSED);
+		}
 
 		if (showWireframe)
 		{
@@ -741,7 +754,7 @@ public:
 			{
 				ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
-				ImGui::Checkbox("Show SS slefe bounds", &showScreenRects);
+				ImGui::Checkbox("Show screen-space slefe bounds", &showScreenRects);
 			}
 		}
 		else
@@ -856,6 +869,34 @@ public:
 		}
 	}
 
+	void
+	RenderStats()
+	{
+		ImGuiIO &io = ImGui::GetIO();
+
+		ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 10, 10), ImGuiCond_Always, ImVec2(1, 0));
+
+		static float opacity = 0.75;
+		if (showDebugWindow)
+			ImGui::DragFloat("Stats opacity", &opacity, 0.01, 0, 1);
+
+		ImGui::SetNextWindowBgAlpha(opacity);
+
+		ImWindow window("Stats", NULL, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar |
+				ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+		if (window)
+		{
+			ImGui::Text("%.1f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+			GLint numTriangles;
+			glGetQueryObjectiv(queries[QUERY_TRIANGLES], GL_QUERY_RESULT, &numTriangles);
+			GLint numFragments;
+			glGetQueryObjectiv(queries[QUERY_FRAGMENTS], GL_QUERY_RESULT, &numFragments);
+			ImGui::Text("%'i triangles, %'i fragments", numTriangles, numFragments);
+		}
+	}
+
     virtual void
     Render(double /*time*/)
     {
@@ -886,6 +927,8 @@ public:
 		if (showSlefeBoxes || showScreenRects)
 			RenderSlefeBoxes();
 
+		RenderStats();
+
         CheckGLErrors("Render()");
     }
 };
@@ -893,6 +936,9 @@ public:
 int
 main()
 {
+	// Try for things like thousands separator in vsnprintf()
+	setlocale(LC_ALL, "");
+
     PixAccCurvedSurf app;
     app.Run();
     return 0;

@@ -27,6 +27,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 )
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${IMGUI_DIR} ${IMGUI_DIR}/examples ${IMGUI_DIR}/misc/raii ${IMGUI_DIR}/misc/stl)
+file(COPY ${IMGUI_DIR}/misc/fonts/DroidSans.ttf DESTINATION .)
 
 set(SUBLIME_DIR ThirdParty/SubLiME)
 target_include_directories(${PROJECT_NAME} PRIVATE ${SUBLIME_DIR})

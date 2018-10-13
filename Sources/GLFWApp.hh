@@ -288,6 +288,8 @@ public:
 		#endif // __APPLE__
 
 		ImGui::StyleColorsLight(); // {Light,Dark,Classic}
+		ImGuiIO &io = ImGui::GetIO();
+		io.Fonts->AddFontFromFileTTF("DroidSans.ttf", 14.0f);
 	}
 
 	~GLFWWindowedApp()
