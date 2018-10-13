@@ -490,13 +490,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		debugProgram.Use();
 
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
+		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
+
 		if (showSlefeBoxes)
 		{
-			glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
-
-			glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
-			glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
-
 			Set3DCamera(debugProgram);
 
 			if (showDebugWindow)
@@ -707,6 +707,7 @@ public:
 			{
 				ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
+				ImGui::Checkbox("Show SS slefe bounds", &showScreenRects);
 			}
 		}
 		else
