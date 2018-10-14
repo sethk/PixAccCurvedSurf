@@ -917,9 +917,12 @@ public:
 				glBeginQuery(GL_SAMPLES_PASSED, queries[QUERY_FRAGMENTS]);
 			}
 
-			glDrawElements(GL_PATCHES,
-					NumTeapotVerticesPerPatch * patchRange[1],
-					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+			for (GLuint i = 0; i < 20; ++i)
+			{
+				glDrawElements(GL_PATCHES,
+						NumTeapotVerticesPerPatch * patchRange[1],
+						GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+			}
 
 			if (showStatsCounters)
 			{
