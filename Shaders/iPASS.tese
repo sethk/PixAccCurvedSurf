@@ -1,11 +1,14 @@
 #version 410 core
-#define METHOD 1
+#define METHOD 3
 
-patch in mat3 C1;
 layout (quads, equal_spacing, ccw) in;
 out vec2 TexCoord;
 out vec3 WorldPosition;
 out vec3 Normal;
+
+#if METHOD == 3
+patch in mat4 Cx, Cy, Cz;
+#endif // METHOD == 3
 
 uniform mat4 ProjectionMatrix;
 
@@ -57,7 +60,7 @@ vec3 BicubicBezier(in vec2 uv, out vec3 normal)
 
 	normal = cross(vc[1] - vc[0], uc[1] - uc[0]);
 	//mat3 m1 = mat3(1, 0, 0, 0, 1, 0, 0, 0, 1);
-	return C1 * (1 - v) * uc[0] + v * uc[1];
+	return (1 - v) * uc[0] + v * uc[1];
 #endif // METHOD == 1
 #if METHOD == 2
     vec3  pos = vec3( 0.0 );
@@ -71,28 +74,6 @@ vec3 BicubicBezier(in vec2 uv, out vec3 normal)
 	return pos;
 #endif
 #if METHOD == 3
-		const mat4 B = mat4(
-				-1, 3,-3, 1,
-				3,-6, 3, 0,
-				-3, 3, 0, 0,
-				1, 0, 0, 0
-				);
-
-		mat4 Px, Py, Pz;
-
-		for(int j=0; j!=4; ++j)
-			for(int i=0; i!=4; ++i)
-			{
-				int k = j*4+i;
-				Px[j][i] = gl_in[k].gl_Position.x;
-				Py[j][i] = gl_in[k].gl_Position.y;
-				Pz[j][i] = gl_in[k].gl_Position.z;
-			}
-
-		mat4 Cx = B * Px * B;
-		mat4 Cy = B * Py * B;
-		mat4 Cz = B * Pz * B;
-
 	vec4 up = vec4(u*u*u, u*u, u, 1);
 	vec4 vp = vec4(v*v*v, v*v, v, 1);
 
