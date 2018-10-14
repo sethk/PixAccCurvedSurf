@@ -376,6 +376,9 @@ GLFWAppMain()
 {
 	try
 	{
+		// Try for things like thousands separator in vsnprintf()
+		setlocale(LC_ALL, "");
+
 		AppT app;
 		app.Run();
 		return 0;

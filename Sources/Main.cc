@@ -966,10 +966,5 @@ public:
 int
 main()
 {
-	// Try for things like thousands separator in vsnprintf()
-	setlocale(LC_ALL, "");
-
-    PixAccCurvedSurf app;
-    app.Run();
-    return 0;
+    return GLFWAppMain<PixAccCurvedSurf>();
 }
