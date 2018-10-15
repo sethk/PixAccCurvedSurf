@@ -7,7 +7,7 @@ set(GLFW_STATIC 0)
 
 set(CMAKE_VERBOSE_MAKEFILE 1)
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter -Wno-missing-braces")
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address")
 
 add_executable(${PROJECT_NAME} Sources/Main.cc)
@@ -33,6 +33,10 @@ set(SUBLIME_DIR ThirdParty/SubLiME)
 target_include_directories(${PROJECT_NAME} PRIVATE ${SUBLIME_DIR})
 target_sources(${PROJECT_NAME} PRIVATE ${SUBLIME_DIR}/bspSlefe.c ${SUBLIME_DIR}/tpSlefe.c ${SUBLIME_DIR}/uniSlefe.c)
 file(COPY ${SUBLIME_DIR}/range/unirange-3_3.asc DESTINATION range)
+
+set(QUICKHULL_DIR ThirdParty/quickhull)
+target_include_directories(${PROJECT_NAME} PRIVATE ${QUICKHULL_DIR})
+target_sources(${PROJECT_NAME} PRIVATE ${QUICKHULL_DIR}/QuickHull.cpp)
 
 find_package(glfw3 3 CONFIG REQUIRED)
 if(${GLFW_STATIC})

@@ -2,3 +2,6 @@
 	path = ThirdParty/imgui
 	url = https://github.com/sethk/imgui
 	branch = raii
+[submodule "ThirdParty/quickhull"]
+	path = ThirdParty/quickhull
+	url = https://github.com/akuukka/quickhull.git
