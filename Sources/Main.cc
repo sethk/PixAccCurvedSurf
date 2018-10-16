@@ -49,6 +49,10 @@ struct SlefeBox
 	float maxScreenEdge;
 };
 
+// For debugging slefe tiles:
+typedef quickhull::QuickHull<float> QuickHull;
+typedef quickhull::HalfEdgeMesh<float, size_t> HalfEdgeMesh;
+
 class PixAccCurvedSurf : public GLFWWindowedApp
 {
 	// Model data
@@ -390,6 +394,18 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			ImGui::TreePop();
 	}
 
+	vec3
+	GetHullVertex(const HalfEdgeMesh &mesh, size_t index)
+	{
+		return vec3(mesh.m_vertices[index].x, mesh.m_vertices[index].y, mesh.m_vertices[index].z);
+	}
+
+	vec3
+	ComputeFaceNormal(vec3 &a, vec3 &b, vec3 &c)
+	{
+		return normalize(cross(b - a, c - a));
+	}
+
 	void
 	ComputeSlefeTiles()
 	{
@@ -414,26 +430,40 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 									tilePoints[uOff][vOff],
 									sizeof(slefeBoxVertices[patchIndex][udiv + uOff][vdiv + vOff]));
 
-					quickhull::QuickHull<float> quickHull;
+					QuickHull quickHull;
 					auto tileMesh = quickHull.getConvexHullAsMesh(value_ptr(tilePoints[0][0][0]),
 							2 * 2 * 8,
 							true,
 							1e-7);
 
+					// It's pretty wasteful not to just build indices into the slefe box vertex list, but this is just
+					// for debug display.
 					for (auto &edge : tileMesh.m_halfEdges)
 					{
-						auto &nextHalf = tileMesh.m_halfEdges[edge.m_next];
-						if (edge.m_endVertex < nextHalf.m_endVertex)
-						{
-							slefeTileIndices.push_back(slefeTileVertices.size());
-							slefeTileVertices.push_back(vec3(tileMesh.m_vertices[edge.m_endVertex].x,
-										tileMesh.m_vertices[edge.m_endVertex].y,
-										tileMesh.m_vertices[edge.m_endVertex].z));
-							slefeTileIndices.push_back(slefeTileVertices.size());
-							slefeTileVertices.push_back(vec3(tileMesh.m_vertices[nextHalf.m_endVertex].x,
-											tileMesh.m_vertices[nextHalf.m_endVertex].y,
-											tileMesh.m_vertices[nextHalf.m_endVertex].z));
-						}
+						auto &otherHalf = tileMesh.m_halfEdges[edge.m_opp];
+
+						if (edge.m_endVertex > otherHalf.m_endVertex)
+							continue;
+
+						vec3 vertex = GetHullVertex(tileMesh, edge.m_endVertex);
+						vec3 otherVertex = GetHullVertex(tileMesh, otherHalf.m_endVertex);
+
+						HalfEdgeMesh::HalfEdge &nextEdge = tileMesh.m_halfEdges[edge.m_next];
+						vec3 thirdVertex = GetHullVertex(tileMesh, nextEdge.m_endVertex);
+						HalfEdgeMesh::HalfEdge &otherNextEdge = tileMesh.m_halfEdges[otherHalf.m_next];
+						vec3 otherThirdVertex = GetHullVertex(tileMesh, otherNextEdge.m_endVertex);
+
+						vec3 faceNormal = ComputeFaceNormal(vertex, otherVertex, thirdVertex);
+						vec3 otherFaceNormal = ComputeFaceNormal(otherVertex, vertex, otherThirdVertex);
+
+						// If this edge separates two faces on the same plane, don't display it in wireframe
+						if (dot(faceNormal, otherFaceNormal) >= 1.0 - 1e-6)
+							continue;
+
+						slefeTileIndices.push_back(slefeTileVertices.size());
+						slefeTileVertices.push_back(vertex);
+						slefeTileIndices.push_back(slefeTileVertices.size());
+						slefeTileVertices.push_back(otherVertex);
 					}
 				}
 
