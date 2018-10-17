@@ -87,9 +87,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	int uniformLevel = 11;
 	Slefe slefes[NumTeapotPatches];
 	bool slefeBoxesChanged;
+	bool slefeTilesChanged;
 	SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1];
 	vec3 slefeBoxVertices[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1][8];
-	bool slefeTilesChanged;
 	vector<vec3> slefeTileVertices;
 	vector<GLuint> slefeTileIndices;
 	GLuint patchSlefeTileIndices[NumTeapotPatches][2]; // first index, last index
@@ -326,7 +326,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	ComputeTessLevels(float vertexTessLevels[NumTeapotVertices])
 	{
-		ComputeSlefeBoxes();
+		ComputeSlefeRects();
 
 		bool levelsOpen = false;
 		if (showDebugWindow)
@@ -714,10 +714,6 @@ public:
 		if (!slefeBoxesChanged)
 			return;
 
-		int width, height;
-		glfwGetWindowSize(window.get(), &width, &height);
-		vec3 halfWindowSize = vec3(width / 2.0, height / 2.0, 0.5);
-
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
 			Slefe &slefe = slefes[patchIndex];
@@ -737,8 +733,31 @@ public:
 					box.worldAxisBox.min = center - halfSize;
 					box.worldAxisBox.max = center + halfSize;
 
+					GetAABBVertices(box.worldAxisBox, slefeBoxVertices[patchIndex][u][v]);
+				}
+		}
+
+		slefeBoxesChanged = false;
+	}
+
+	void
+	ComputeSlefeRects()
+	{
+		ComputeSlefeBoxes();
+
+		int width, height;
+		glfwGetWindowSize(window.get(), &width, &height);
+		vec3 halfWindowSize = vec3(width / 2.0, height / 2.0, 0.5);
+
+		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
+		{
+			SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+
+			for (GLuint u = 0; u <= numSlefeDivs; ++u)
+				for (GLuint v = 0; v <= numSlefeDivs; ++v)
+				{
+					struct SlefeBox &box = slefeBoxes[u][v];
 					vec3 (&worldBoxVertices)[8] = slefeBoxVertices[patchIndex][u][v];
-					GetAABBVertices(box.worldAxisBox, worldBoxVertices);
 
 					vec3 &screenMin = box.screenAxisBox.min;
 					vec3 &screenMax = box.screenAxisBox.max;
@@ -763,8 +782,6 @@ public:
 					box.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
 				}
 		}
-
-		slefeBoxesChanged = false;
 	}
 
 	void
