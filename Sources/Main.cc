@@ -110,6 +110,33 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	GLuint texture;
 	bool useTexture = true;
 	GLint textureRepeat = 5;
+	const GLenum minFilters[6] =
+	{
+		GL_NEAREST,
+		GL_LINEAR,
+		GL_NEAREST_MIPMAP_NEAREST,
+		GL_LINEAR_MIPMAP_NEAREST,
+		GL_NEAREST_MIPMAP_LINEAR,
+		GL_LINEAR_MIPMAP_LINEAR
+	};
+	const GLenum magFilters[2] =
+	{
+		GL_NEAREST,
+		GL_LINEAR
+	};
+	const char * const filterStrings[6] =
+	{
+		"Nearest",
+		"Linear",
+		"Nearest mipmap nearest",
+		"Linear mipmap nearest",
+		"Nearest mipmap linear",
+		"Linear mipmap linear"
+	};
+	int minFilterIndex = 5;
+	int magFilterIndex = 1;
+	float minTextureLOD = 0;
+	float maxTextureLOD = 4.5;
 	float shininess = 32;
 
 	// Debug
@@ -150,11 +177,41 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	UpdateTexture()
 	{
 		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		vec3 checker[2][2] = {{diffuseColor1, diffuseColor2}, {diffuseColor2, diffuseColor1}};
-		GLuint textureSize = (useTexture) ? 2 : 1;
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, textureSize, textureSize, 0, GL_RGB, GL_FLOAT, checker);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilters[minFilterIndex]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilters[magFilterIndex]);
+
+		if (useTexture)
+		{
+			static const GLuint minCheckerSize = 2;
+			static const GLuint maxCheckerLevel = 10;
+
+			for (GLuint checkerLevel = 0; checkerLevel <= maxCheckerLevel; ++checkerLevel)
+			{
+				GLuint checkerSize = minCheckerSize << (maxCheckerLevel - checkerLevel);
+
+				static vec3 checker[(minCheckerSize << maxCheckerLevel) * (minCheckerSize << maxCheckerLevel)];
+				for (GLuint u = 0; u < checkerSize; ++u)
+					for (GLuint v = 0; v < checkerSize; ++v)
+					{
+						bool check = ((u < checkerSize / 2) ^ (v < checkerSize / 2));
+						checker[v * checkerSize + u] = (check) ? diffuseColor1 : diffuseColor2;
+					}
+
+				glTexImage2D(GL_TEXTURE_2D, checkerLevel, GL_RGB, checkerSize, checkerSize, 0, GL_RGB, GL_FLOAT, checker);
+			}
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxCheckerLevel);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_LOD, minTextureLOD);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, maxTextureLOD);
+		}
+		else
+		{
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1, 1, 0, GL_RGB, GL_FLOAT, &diffuseColor1);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		}
 
 		CheckGLErrors("UpdateTexture()");
 	}
@@ -1008,7 +1065,20 @@ public:
 				textureChanged|= ImGui::ColorEdit3("Checker color",
 						value_ptr(diffuseColor2),
 						ImGuiColorEditFlags_NoInputs);
+
 				ImGui::SliderInt("Repeat", &textureRepeat, 1, 25);
+
+				if (showDebugWindow)
+				{
+					if (ImGui::Combo("Min filter", &minFilterIndex, filterStrings, IM_ARRAYSIZE(minFilters)))
+						textureChanged = true;
+					if (ImGui::Combo("Mag filter", &magFilterIndex, filterStrings, IM_ARRAYSIZE(magFilters)))
+						textureChanged = true;
+					if (ImGui::DragFloat("Min LOD", &minTextureLOD, 0.5, -10, 10))
+						textureChanged = true;
+					if (ImGui::DragFloat("Max LOD", &maxTextureLOD, 0.5, -10, 10))
+						textureChanged = true;
+				}
 			}
 
 			if (textureChanged)
