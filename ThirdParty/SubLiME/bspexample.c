@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <GL/glut.h>
+#ifdef __APPLE__
+	#include <GLUT/glut.h>
+#else
+	#include <GL/glut.h>
+#endif // !__APPLE__
 #include "SubLiME.h"
 
 /*      B-spline data: knots, coefficients, degree          */
