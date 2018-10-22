@@ -21,8 +21,6 @@ using glm::vec2;
 using glm::mat4;
 using glm::value_ptr;
 
-#define TESS_LEVEL_CEIL 1 // round up fractional tess. levels
-
 static const GLuint threeD = 3;
 static const GLuint maxSlefeDivs = 9;
 static const float minCameraZ = 0.1f;
@@ -90,6 +88,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	bool slefeBoxesChanged;
 	bool slefeTilesChanged;
 	GLuint numSlefeDivs = 3;
+	bool fracTessLevels = true;
 	SlefeBox patchSlefeBoxes[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1];
 	vec3 slefeBoxVertices[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1][8];
 	vector<vec3> slefeTileVertices;
@@ -437,9 +436,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				}
 
 			float tessLevel = numSlefeDivs * sqrt(maxScreenEdge);
-			#if TESS_LEVEL_CEIL
+			if (!fracTessLevels)
 				tessLevel = ceilf(tessLevel);
-			#endif // TESS_LEVEL_CEIL
 
 			vertexTessLevels[TeapotIndices[patchIndex][0][2]] =
 					vertexTessLevels[TeapotIndices[patchIndex][2][3]] =
@@ -953,6 +951,7 @@ public:
 					numSlefeDivs = glm::clamp(numSlefeDivs, 2u, maxSlefeDivs);
 					slefesChanged = true;
 				}
+				ImGui::Checkbox("Fractional tessellation", &fracTessLevels);
 
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
 				ImGui::Checkbox("Show screen-space slefe bounds", &showScreenRects);
