@@ -24,7 +24,7 @@ using glm::value_ptr;
 #define TESS_LEVEL_CEIL 1 // round up fractional tess. levels
 
 static const GLuint threeD = 3;
-static const GLuint numSlefeDivs = 3;
+static const GLuint maxSlefeDivs = 9;
 static const float minCameraZ = 0.1f;
 static const float maxCameraZ = 100.0f;
 
@@ -33,7 +33,7 @@ struct Slefe
     enum {LOWER, UPPER, NUM_BOUNDS};
     struct Bounds
     {
-        vec3 points[numSlefeDivs + 1][numSlefeDivs + 1];
+        vec3 points[maxSlefeDivs + 1][maxSlefeDivs + 1];
     } bounds[NUM_BOUNDS];
 };
 
@@ -86,10 +86,12 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	int tessMode = TESS_IPASS;
 	int uniformLevel = 11;
 	Slefe slefes[NumTeapotPatches];
+	bool slefesChanged = true;
 	bool slefeBoxesChanged;
 	bool slefeTilesChanged;
-	SlefeBox patchSlefeBoxes[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1];
-	vec3 slefeBoxVertices[NumTeapotPatches][numSlefeDivs + 1][numSlefeDivs + 1][8];
+	GLuint numSlefeDivs = 3;
+	SlefeBox patchSlefeBoxes[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1];
+	vec3 slefeBoxVertices[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1][8];
 	vector<vec3> slefeTileVertices;
 	vector<GLuint> slefeTileIndices;
 	GLuint patchSlefeTileIndices[NumTeapotPatches][2]; // first index, last index
@@ -293,6 +295,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	ComputeSlefes()
 	{
+		if (!slefesChanged)
+			return;
+
 		for (GLint patchIndex = 0; patchIndex < NumTeapotPatches; ++patchIndex)
 		{
 			REAL coeff[4][4][threeD];
@@ -321,6 +326,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 					slefe.bounds[Slefe::UPPER].points[u][v] = vec3(upper[u][v][0], upper[u][v][1], upper[u][v][2]);
 				}
 		}
+
+		slefesChanged = false;
+		slefeBoxesChanged = true;
 	}
 
 	void
@@ -342,7 +350,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		{
 			bool patchOpen = (levelsOpen && ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str()));
 
-			const SlefeBox (&slefeBoxes)[4][4] = patchSlefeBoxes[patchIndex];
+			const SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			float maxScreenEdge = 0;
 
@@ -409,6 +417,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	ComputeSlefeTiles()
 	{
+		ComputeSlefeBoxes();
+
 		if (!slefeTilesChanged)
 			return;
 
@@ -587,7 +597,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			if (slefeNodesOpen)
 				patchOpen = ImGui::TreeNode((string("Slefe box ") + std::to_string(patchIndex)).c_str());
 
-			const SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			const SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
@@ -681,10 +691,6 @@ public:
         setenv("SUBLIMEPATH", ".", false);
         InitBounds();
 
-		ComputeSlefes();
-		slefeBoxesChanged = true;
-		slefeTilesChanged = true;
-
 		glGetIntegerv(GL_SAMPLES, &numSampleBuffers);
 
 		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
@@ -711,13 +717,15 @@ public:
 	void
 	ComputeSlefeBoxes()
 	{
+		ComputeSlefes();
+
 		if (!slefeBoxesChanged)
 			return;
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
 			Slefe &slefe = slefes[patchIndex];
-			SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
@@ -738,6 +746,7 @@ public:
 		}
 
 		slefeBoxesChanged = false;
+		slefeTilesChanged = true;
 	}
 
 	void
@@ -751,7 +760,7 @@ public:
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
-			SlefeBox (&slefeBoxes)[numSlefeDivs + 1][numSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
@@ -876,14 +885,21 @@ public:
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
         ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
-		ImGui::Combo("Tess. mode", &tessMode, "iPASS\0Uniform\0\0");
+		ImGui::Combo("Mode", &tessMode, "iPASS\0Uniform\0\0");
 		if (tessMode == TESS_IPASS)
 		{
 			if (ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen))
 			{
-				ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
+				static const GLuint step = 1;
+				if (ImGui::InputScalar("Divisions", ImGuiDataType_U32, &numSlefeDivs, &step))
+				{
+					numSlefeDivs = glm::clamp(numSlefeDivs, 2u, maxSlefeDivs);
+					slefesChanged = true;
+				}
+
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
 				ImGui::Checkbox("Show screen-space slefe bounds", &showScreenRects);
+				ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
 			}
 		}
 		else
