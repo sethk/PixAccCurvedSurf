@@ -138,6 +138,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	float minTextureLOD = 0;
 	float maxTextureLOD = 4.5;
 	float shininess = 32;
+	int bezierPatchMethod = 1;
 
 	// Debug
 	bool showStatsCounters = false;
@@ -160,10 +161,15 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	void
 	RebuildMainProgram()
 	{
+		string preproc = std::string("#define METHOD ") + std::to_string(bezierPatchMethod) + '\n';
+
 		mainProgram = nullptr;
-		mainProgram = unique_ptr<ShaderProgram>(new ShaderProgram());
+		mainProgram = unique_ptr<ShaderProgram>(new ShaderProgram("#version 410 core\n", preproc.c_str()));
 
 		mainProgram->LoadShader(GL_VERTEX_SHADER, "iPASS.vert");
+
+		mainProgram->Include("BicubicBezier.glsl");
+
 		mainProgram->LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
 		mainProgram->LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
 		if (showNormals)
@@ -1172,6 +1178,15 @@ public:
 				UpdateTexture();
 
 			ImGui::SliderFloat("Shininess", &shininess, 4, 120);
+
+			if (showDebugWindow)
+			{
+				if (ImGui::InputInt("BPatch method", &bezierPatchMethod))
+				{
+					bezierPatchMethod = glm::clamp(bezierPatchMethod, 1, 3);
+					materialChanged = true;
+				}
+			}
 
 			if (materialChanged)
 				RebuildMainProgram();

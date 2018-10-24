@@ -1,5 +1,3 @@
-#version 410 core
-
 in vec4 Position;
 in float TessLevel;
 out float PatchTessLevels;

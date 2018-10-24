@@ -12,7 +12,15 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter -Wno-missing-braces")
 
 add_executable(${PROJECT_NAME} Sources/Main.cc)
 
-foreach(SHADER Debug.vert UniformColor.frag DebugNormal.frag iPASS.vert iPASS.tesc iPASS.tese BlinnPhong.frag)
+foreach(SHADER
+        Debug.vert
+        UniformColor.frag
+        DebugNormal.frag
+        BicubicBezier.glsl
+        iPASS.vert
+        iPASS.tesc
+        iPASS.tese
+        BlinnPhong.frag)
     configure_file(Shaders/${SHADER} ${SHADER} COPYONLY)
 endforeach()
 

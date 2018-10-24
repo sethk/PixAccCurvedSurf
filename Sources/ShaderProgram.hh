@@ -2,12 +2,15 @@
 #include <fstream>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <vector>
 
 class ShaderProgram
 {
 	GLuint program;
     GLint modelViewMatrixLocation;
     GLint projectionMatrixLocation;
+    std::string version, macros;
+    std::vector<std::string> includes;
 
 	void
 	CheckShaderStatus(GLuint object,
@@ -29,8 +32,22 @@ class ShaderProgram
 		}
 	}
 
+	std::string
+	ReadFile(const std::string &path)
+	{
+		std::ifstream file(path);
+		if (!file)
+			throw std::runtime_error("Could not open " + path);
+
+		std::ostringstream oss;
+		oss << file.rdbuf();
+
+		return oss.str();
+	}
+
 public:
-	ShaderProgram()
+	ShaderProgram(const char *version = "#version 410 core\n", const char *macros = "")
+			: version(version), macros(macros)
 	{
 		program = glCreateProgram();
 	}
@@ -45,16 +62,21 @@ public:
     {
         GLuint shader = glCreateShader(type);
 
-		std::ifstream file(path);
-        if (!file)
-            throw std::runtime_error("Could not open " + path);
+	    std::vector<const GLchar *> sources;
 
-		std::ostringstream oss;
-        oss << file.rdbuf();
+	    if (!version.empty())
+		    sources.push_back(version.c_str());
 
-		std::string source = oss.str();
-        const GLchar *c_source = source.c_str();
-        glShaderSource(shader, 1, &c_source, NULL);
+	    if (!macros.empty())
+			sources.push_back(macros.c_str());
+
+	    for (auto &include : includes)
+	    	sources.push_back(include.c_str());
+
+		std::string source = ReadFile(path);
+		sources.push_back(source.c_str());
+
+        glShaderSource(shader, sources.size(), sources.data(), NULL);
 
         glCompileShader(shader);
         try
@@ -70,6 +92,12 @@ public:
         }
 
         glAttachShader(program, shader);
+    }
+
+    void
+    Include(const std::string &path)
+    {
+		includes.push_back(ReadFile(path));
     }
 
 	void
