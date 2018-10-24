@@ -140,6 +140,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	float shininess = 32;
 
 	// Debug
+	bool showStatsCounters = false;
 	enum {QUERY_TRIANGLES, QUERY_FRAGMENTS, NUM_QUERIES};
 	GLuint queries[NUM_QUERIES];
 	bool showModel = true;
@@ -887,15 +888,21 @@ public:
 
 		if (showModel)
 		{
-			glBeginQuery(GL_PRIMITIVES_GENERATED, queries[QUERY_TRIANGLES]);
-			glBeginQuery(GL_SAMPLES_PASSED, queries[QUERY_FRAGMENTS]);
+			if (showStatsCounters)
+			{
+				glBeginQuery(GL_PRIMITIVES_GENERATED, queries[QUERY_TRIANGLES]);
+				glBeginQuery(GL_SAMPLES_PASSED, queries[QUERY_FRAGMENTS]);
+			}
 
 			glDrawElements(GL_PATCHES,
 					NumTeapotVerticesPerPatch * patchRange[1],
 					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 
-			glEndQuery(GL_PRIMITIVES_GENERATED);
-			glEndQuery(GL_SAMPLES_PASSED);
+			if (showStatsCounters)
+			{
+				glEndQuery(GL_PRIMITIVES_GENERATED);
+				glEndQuery(GL_SAMPLES_PASSED);
+			}
 		}
 
 		if (showWireframe)
@@ -1164,14 +1171,20 @@ public:
 		{
 			ImGui::Text("%.1f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-			if (showModel)
+			if (ImGui::IsWindowHovered())
 			{
-				GLint numTriangles;
-				glGetQueryObjectiv(queries[QUERY_TRIANGLES], GL_QUERY_RESULT, &numTriangles);
-				GLint numFragments;
-				glGetQueryObjectiv(queries[QUERY_FRAGMENTS], GL_QUERY_RESULT, &numFragments);
-				ImGui::Text("%'i triangles, %'i fragments", numTriangles, numFragments);
+				if (showStatsCounters)
+				{
+					GLint numTriangles;
+					glGetQueryObjectiv(queries[QUERY_TRIANGLES], GL_QUERY_RESULT, &numTriangles);
+					GLint numFragments;
+					glGetQueryObjectiv(queries[QUERY_FRAGMENTS], GL_QUERY_RESULT, &numFragments);
+					ImGui::Text("%'i triangles, %'i fragments", numTriangles, numFragments);
+				}
+				showStatsCounters = showModel;
 			}
+			else
+				showStatsCounters = false;
 		}
 	}
 
@@ -1205,7 +1218,12 @@ public:
 				RenderSlefeBoxes();
 		}
 
-		RenderStats();
+		static bool showStats = true;
+		if (showDebugWindow)
+			ImGui::Checkbox("Show stats overlay", &showStats);
+
+		if (showStats)
+			RenderStats();
 
         CheckGLErrors("Render()");
     }
