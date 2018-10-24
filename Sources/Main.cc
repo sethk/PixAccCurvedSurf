@@ -1100,11 +1100,16 @@ public:
 		else
 			glDisable(GL_MULTISAMPLE);
 
-        static vec3 modelPos;
+		if (ImGui::IsKeyPressed(GLFW_KEY_1, false))
+			showWireframe = !showWireframe;
+
+        static vec3 modelPos = vec3(0);
+		static vec3 modelScale = vec3(1);
         if (ImGui::CollapsingHeader("Model"))
         {
             ImGui::DragFloat3("Position", value_ptr(modelPos), 0.01, -10, 10, "%.2f");
-            if (ImGui::DragInt2("Draw patches", patchRange, 0.2, 0, NumTeapotPatches))
+			ImGui::DragFloat3("Scale", value_ptr(modelScale), 0.01, -10, 10, "%.2f");
+            if (ImGui::DragInt2("Patches", patchRange, 0.2, 0, NumTeapotPatches))
             {
                 patchRange[0] = std::min(std::max(patchRange[0], 0), NumTeapotPatches - 1);
                 patchRange[1] = std::max(std::min(patchRange[1], NumTeapotPatches - patchRange[0]), 1);
@@ -1118,6 +1123,7 @@ public:
         }
 
         modelViewMatrix = glm::translate(modelViewMatrix, modelPos - modelCentroid);
+		modelViewMatrix = glm::scale(modelViewMatrix, modelScale);
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
