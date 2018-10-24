@@ -244,6 +244,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glEnable(GL_BLEND);
 		}
+		EnablePolygonOffset();
 
 		assert(start < indices.size());
 		if (count == -1)
@@ -261,6 +262,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			glDisable(GL_LINE_SMOOTH);
 			glDisable(GL_BLEND);
 		}
+		DisablePolygonOffset();
 
         CheckGLErrors("RenderDebugPrimitives()");
 	}
@@ -717,6 +719,27 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		CheckGLErrors("RenderSlefeBoxes()");
 	}
 
+	void
+	EnablePolygonOffset()
+	{
+		static float polygonOffset[2] = {0, -30};
+		static ImGuiOnceUponAFrame once;
+		if (showDebugWindow && once)
+			ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
+
+		glPolygonOffset(polygonOffset[0], polygonOffset[1]);
+
+		glEnable(GL_POLYGON_OFFSET_LINE);
+		glEnable(GL_POLYGON_OFFSET_POINT);
+	}
+
+	void
+	DisablePolygonOffset()
+	{
+		glDisable(GL_POLYGON_OFFSET_LINE);
+		glDisable(GL_POLYGON_OFFSET_POINT);
+	}
+
 public:
     PixAccCurvedSurf() : GLFWWindowedApp("PixAccCurvedSurf")
     {
@@ -912,12 +935,7 @@ public:
 				glEnable(GL_COLOR_LOGIC_OP);
 				glLogicOp(GL_INVERT);
 
-				static float polygonOffset[2] = {0, -30};
-				if (showDebugWindow)
-					ImGui::DragFloat2("Polygon offset", polygonOffset, 0.01, -1000, 1000);
-				glPolygonOffset(polygonOffset[0], polygonOffset[1]);
-
-				glEnable(GL_POLYGON_OFFSET_LINE);
+				EnablePolygonOffset();
 			}
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -930,7 +948,7 @@ public:
 
 			if (showModel)
 			{
-				glDisable(GL_POLYGON_OFFSET_LINE);
+				DisablePolygonOffset();
 
 				glDisable(GL_COLOR_LOGIC_OP);
 			}
