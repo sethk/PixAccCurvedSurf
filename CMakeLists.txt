@@ -26,7 +26,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         ${IMGUI_DIR}/examples/imgui_impl_opengl3.cpp
 )
 target_include_directories(${PROJECT_NAME} PRIVATE
-        ${IMGUI_DIR} ${IMGUI_DIR}/examples ${IMGUI_DIR}/misc/raii ${IMGUI_DIR}/misc/stl)
+        ${IMGUI_DIR} ${IMGUI_DIR}/examples ${IMGUI_DIR}/misc/cpp ${IMGUI_DIR}/misc/stl)
 file(COPY ${IMGUI_DIR}/misc/fonts/DroidSans.ttf DESTINATION .)
 
 set(SUBLIME_DIR ThirdParty/SubLiME)
