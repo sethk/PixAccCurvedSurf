@@ -1,5 +1,6 @@
 #include "GLFWApp.hh"
 #include "ShaderProgram.hh"
+#include "AnimationCurve.hh"
 #include "../Data/Teapot.h"
 #include <istream>
 #include <vector>
@@ -935,7 +936,7 @@ public:
 	}
 
 	void
-	RenderUI(void)
+	RenderUI(double time)
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
         ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
@@ -988,16 +989,69 @@ public:
 				cameraOffset[2]+= io.MouseWheel / 10.0;
 		}
 
+		static float zoomSpeed = 0.01;
+		static float panSpeed = 0.2;
+		if (showDebugWindow)
+		{
+			ImGui::DragFloat("Zoom speed", &zoomSpeed, 0.1, 0.001, 2);
+			ImGui::DragFloat("Pan speed", &panSpeed, 0.1, 0.001, 2);
+		}
+
+		if (!io.WantCaptureKeyboard)
+		{
+			if (ImGui::IsKeyDown(GLFW_KEY_W))
+				cameraOffset[2]-= zoomSpeed;
+			else if (ImGui::IsKeyDown(GLFW_KEY_S))
+				cameraOffset[2]+= zoomSpeed;
+			if (ImGui::IsKeyDown(GLFW_KEY_UP))
+				cameraParams[1]-= panSpeed;
+			else if (ImGui::IsKeyDown(GLFW_KEY_DOWN))
+				cameraParams[1]+= panSpeed;
+			if (ImGui::IsKeyDown(GLFW_KEY_LEFT))
+				cameraParams[0]-= panSpeed;
+			else if (ImGui::IsKeyDown(GLFW_KEY_RIGHT))
+				cameraParams[0]+= panSpeed;
+		}
+
+		static bool animateAzimuth = false;
+		static AnimationCurve azimuthCurve(-110, 40, 0.5);
+		static bool animateElevation = false;
+		static AnimationCurve elevationCurve(-20, 40, 0.25);
+		static bool animateDistance = false;
+		static AnimationCurve distanceCurve(2.4, 15.0, 0.5);
+
         if (ImGui::CollapsingHeader("Camera"))
         {
-			ImGui::DragFloat3("X/Y/Z Offset", value_ptr(cameraOffset), -0.01, -10, 10.0);
+			ImGui::Checkbox("Anim. dist.", &animateDistance);
+			ImGui::SameLine();
+			ImGui::Checkbox("Anim. azi.", &animateAzimuth);
+			ImGui::SameLine();
+			ImGui::Checkbox("Anim. elev.", &animateElevation);
+
+			if (showDebugWindow)
+			{
+				azimuthCurve.RenderUI("Azimuth");
+				elevationCurve.RenderUI("Elevation");
+				distanceCurve.RenderUI("Distance");
+			}
+
+			ImGui::DragFloat3("X/Y/Z Off.", value_ptr(cameraOffset), -0.01, -10, 10.0);
             ImGui::DragFloat2("Azi./Elev.", cameraParams, 1, -179, 180, "%.0f deg");
             ImGui::Checkbox("Perspective", &perspective);
+
             if (perspective)
                 ImGui::DragFloat("FOV", &fov, 1, 30, 120);
 			if (numSampleBuffers > 1)
 				ImGui::Checkbox((std::to_string(numSampleBuffers) + "x MSAA").c_str(), &useMultiSampling);
         }
+
+		if (animateDistance)
+			cameraOffset[2] = distanceCurve.Sample(time);
+		if (animateAzimuth)
+			cameraParams[0] = azimuthCurve.Sample(time);
+		if (animateElevation)
+			cameraParams[1] = elevationCurve.Sample(time);
+
 		while (cameraParams[0] <= -180)
 			cameraParams[0]+= 360;
 		while (cameraParams[0] > 180)
@@ -1122,9 +1176,9 @@ public:
 	}
 
     virtual void
-    Render(double /*time*/)
+    Render(double time)
     {
-		RenderUI();
+		RenderUI(time);
 
         glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, 1);
 
