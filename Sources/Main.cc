@@ -95,6 +95,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	vector<vec3> slefeTileVertices;
 	vector<GLuint> slefeTileIndices;
 	GLuint patchSlefeTileIndices[NumTeapotPatches][2]; // first index, last index
+	bool showError = false;
 
 	// Scene
 	vec3 backgroundColor = vec3(24 / 255.0);
@@ -163,6 +164,11 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	{
 		string preproc = std::string("#define METHOD ") + std::to_string(bezierPatchMethod) + '\n';
 
+		if (showError)
+			preproc+= "#define SHOW_ERROR 1\n";
+		else if (showNormals)
+			preproc+= "#define SHOW_NORMAL 1\n";
+
 		mainProgram = nullptr;
 		mainProgram = unique_ptr<ShaderProgram>(new ShaderProgram("#version 410 core\n", preproc.c_str()));
 
@@ -172,8 +178,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		mainProgram->LoadShader(GL_TESS_CONTROL_SHADER, "iPASS.tesc");
 		mainProgram->LoadShader(GL_TESS_EVALUATION_SHADER, "iPASS.tese");
-		if (showNormals)
-			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "DebugNormal.frag");
+		if (showError || showNormals)
+			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "Debug.frag");
 		else
 			mainProgram->LoadShader(GL_FRAGMENT_SHADER, "BlinnPhong.frag");
 
@@ -905,7 +911,16 @@ public:
 		if (!twoSided)
 			glEnable(GL_CULL_FACE);
 
-		if (!showNormals)
+		if (showError)
+		{
+			int width, height;
+			glfwGetWindowSize(window.get(), &width, &height);
+			glm::ivec2 viewportSize = glm::ivec2(width, height);
+			mainProgram->SetUniform("ViewportSize", viewportSize);
+		}
+		else if (showNormals)
+			;
+		else
 		{
 			mainProgram->SetUniform("AmbientIntensity", ambientIntensity);
 			mainProgram->SetUniform("TextureRepeat", textureRepeat);
@@ -995,6 +1010,9 @@ public:
 		}
 		else
 			ImGui::DragInt("Level", &uniformLevel, 0.2, 1, 100);
+
+		if (ImGui::Checkbox("Show parametric error", &showError))
+			RebuildMainProgram();
 
 		static vec3 cameraOffset(0, 0, 5);
         static float cameraParams[2] = {0, 30};

@@ -15,7 +15,7 @@ add_executable(${PROJECT_NAME} Sources/Main.cc)
 foreach(SHADER
         Debug.vert
         UniformColor.frag
-        DebugNormal.frag
+        Debug.frag
         BicubicBezier.glsl
         iPASS.vert
         iPASS.tesc

@@ -141,6 +141,13 @@ public:
 	}
 
 	void
+	SetUniform(const char *name, const glm::ivec2 &v)
+	{
+		GLint location = GetUniformLocation(name);
+		glUniform2iv(location, 1, value_ptr(v));
+	}
+
+	void
 	SetUniform(const char *name, const glm::vec3 &v)
 	{
 		GLint location = GetUniformLocation(name);
