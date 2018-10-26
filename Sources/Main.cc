@@ -938,7 +938,14 @@ public:
 				glBeginQuery(GL_SAMPLES_PASSED, queries[QUERY_FRAGMENTS]);
 			}
 
-			for (GLuint i = 0; i < 20; ++i)
+			static GLuint copies = 1;
+			if (showDebugWindow)
+			{
+				static const GLuint step = 1;
+				ImGui::InputScalar("Model copies", ImGuiDataType_U32, &copies, &step);
+			}
+
+			for (GLuint i = 0; i < copies; ++i)
 			{
 				glDrawElements(GL_PATCHES,
 						NumTeapotVerticesPerPatch * patchRange[1],
