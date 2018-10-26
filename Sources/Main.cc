@@ -106,7 +106,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	bool showError = false;
 
 	// Scene
-	vec3 backgroundColor = vec3(24 / 255.0);
+	vec3 backgroundColor = vec3(24 / 255.0f);
 	float ambientIntensity = 0.1;
 	vec3 lightPosition = vec3(10);
 	float lightIntensity = 1;
@@ -228,8 +228,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxCheckerLevel);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_LOD, minTextureLOD);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, maxTextureLOD);
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_LOD, minTextureLOD);
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, maxTextureLOD);
 		}
 		else
 		{
