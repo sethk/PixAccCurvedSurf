@@ -87,7 +87,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	// Tessellation
 	enum {TESS_IPASS, TESS_UNIFORM};
 	int tessMode = TESS_IPASS;
-	int uniformLevel = 11;
+	float uniformLevel = 11;
 	Slefe slefes[NumTeapotPatches];
 	bool slefesChanged = true;
 	bool slefeBoxesChanged;
@@ -176,6 +176,11 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			preproc+= "#define SHOW_ERROR 1\n";
 		else if (showNormals)
 			preproc+= "#define SHOW_NORMAL 1\n";
+
+		if (fracTessLevels)
+			preproc+= "#define TESS_SPACING fractional_even_spacing\n";
+		else
+			preproc+= "#define TESS_SPACING equal_spacing\n";
 
 		mainProgram = nullptr;
 		mainProgram = unique_ptr<ShaderProgram>(new ShaderProgram("#version 410 core\n", preproc.c_str()));
@@ -489,8 +494,6 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 				ImGui::DragFloat("Mystery factor 2", &mysteryFactor2, 0.01);
 
 			float tessLevel = numSlefeDivs * sqrtf(patchMaxScreenEdge / pixelAccuracy) * mysteryFactor2;
-			if (!fracTessLevels)
-				tessLevel = ceilf(tessLevel);
 
 			auto &levels = vertexTessLevels;
 			auto &indices = TeapotIndices[patchIndex];
@@ -1099,7 +1102,8 @@ public:
 				if (ImGui::DragFloat("Pix acc.", &pixelAccuracy, 0.01, 0.01, 10.0))
 					pixelAccuracy = glm::clamp(pixelAccuracy, 0.01f, 10.0f);
 
-				ImGui::Checkbox("Fractional tessellation", &fracTessLevels);
+				if (ImGui::Checkbox("Fractional tessellation", &fracTessLevels))
+					RebuildMainProgram();
 
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
 				ImGui::Checkbox("Show screen-space slefe bounds", &showScreenRects);

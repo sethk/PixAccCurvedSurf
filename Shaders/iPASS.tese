@@ -1,4 +1,4 @@
-layout (quads, equal_spacing, ccw) in;
+layout (quads, TESS_SPACING, ccw) in;
 patch in BicubicPatch Patch;
 out vec2 TexCoord;
 out vec3 WorldPosition;
