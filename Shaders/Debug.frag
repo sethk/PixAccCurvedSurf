@@ -25,11 +25,11 @@ main()
 		vec2 halfViewport = ViewportSize * 0.5;
 
 		float error = distance(limitPos.xy * halfViewport, approxPos.xy * halfViewport);
-		if (error <= 0.1)
+		if (error < 0.1)
 			FragColor = vec4(0.4, 0.4, 0.4, 1);
-		else if (error <= 0.5)
+		else if (error < 0.5)
 			FragColor = vec4(0, 0, 1, 1);
-		else if (error <= 1.0)
+		else if (error < 1.0)
 			FragColor = vec4(0, 1, 0, 1);
 		else
 			FragColor = vec4(1, 0, 0, 1);

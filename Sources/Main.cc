@@ -21,8 +21,11 @@ using glm::vec3;
 using glm::vec2;
 using glm::mat4;
 using glm::value_ptr;
+using glm::min;
+using glm::max;
 
 static const GLuint threeD = 3;
+static const GLuint numCubicTerms = 4;
 static const GLuint maxSlefeDivs = 9;
 static const float minCameraZ = 0.1f;
 static const float maxCameraZ = 100.0f;
@@ -34,6 +37,7 @@ struct Slefe
     {
         vec3 points[maxSlefeDivs + 1][maxSlefeDivs + 1];
     } bounds[NUM_BOUNDS];
+	vec3 midPoints[maxSlefeDivs][maxSlefeDivs][2][NUM_BOUNDS];
 };
 
 struct AABB
@@ -89,9 +93,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	bool slefeBoxesChanged;
 	bool slefeTilesChanged;
 	GLuint numSlefeDivs = 3;
+	float pixelAccuracy = 0.5;
+	//float depthAccuracy = 0.01;
 	bool fracTessLevels = true;
-	SlefeBox patchSlefeBoxes[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1];
-	vec3 slefeBoxVertices[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1][8];
+	SlefeBox pointSlefeBoxes[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1];
+	SlefeBox tileSlefeBoxes[NumTeapotVertices][maxSlefeDivs][maxSlefeDivs];
+	vec3 pointBoxVertices[NumTeapotPatches][maxSlefeDivs + 1][maxSlefeDivs + 1][8];
+	vec3 tileBoxVertices[NumTeapotPatches][maxSlefeDivs][maxSlefeDivs][8];
 	vector<vec3> slefeTileVertices;
 	vector<GLuint> slefeTileIndices;
 	GLuint patchSlefeTileIndices[NumTeapotPatches][2]; // first index, last index
@@ -241,6 +249,12 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			const vector<GLuint> &indices,
 			GLuint start = 0, GLint count = -1)
 	{
+		#ifndef NDEBUG
+			GLuint vertexArray;
+			glGetIntegerv(GL_VERTEX_ARRAY_BINDING, (GLint *)&vertexArray);
+			assert(vertexArray == vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+		#endif // !NDEBUG
+
 		GLint positionLocation = debugProgram.GetAttribLocation("Position");
 		glEnableVertexAttribArray(positionLocation);
 		glVertexAttribPointer(positionLocation, threeD, GL_FLOAT, GL_FALSE, 0, 0);
@@ -293,8 +307,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			if (patchesOpen)
 				patchOpen = ImGui::TreeNode((string("Patch ") + std::to_string(i)).c_str());
 
-			for (GLuint j = 0; j < 4; ++j)
-				for (GLuint k = 0; k < 4; ++k)
+			for (GLuint j = 0; j < numCubicTerms; ++j)
+				for (GLuint k = 0; k < numCubicTerms; ++k)
 				{
 					if (patchOpen)
 					{
@@ -340,8 +354,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		vector<GLuint> indices;
 
 		for (GLint i = patchRange[0]; i < patchRange[0] + patchRange[1]; ++i)
-			for (GLuint j = 0; j < 4; ++j)
-				for (GLuint k = 0; k < 4; ++k)
+			for (GLuint j = 0; j < numCubicTerms; ++j)
+				for (GLuint k = 0; k < numCubicTerms; ++k)
 					if (k < 3)
 					{
 						indices.push_back(TeapotIndices[i][j][k]);
@@ -365,6 +379,21 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 	void
+	ComputeSlefeMidPoints(Slefe &slefe)
+	{
+		for (GLuint whichBounds = 0; whichBounds < Slefe::NUM_BOUNDS; ++whichBounds)
+		{
+			auto &points = slefe.bounds[whichBounds].points;
+			for (GLuint u = 0; u < numSlefeDivs; ++u)
+				for (GLuint v = 0; v < numSlefeDivs; ++v)
+				{
+					slefe.midPoints[u][v][whichBounds][0] = glm::mix(points[u][v], points[u + 1][v + 1], 0.5);
+					slefe.midPoints[u][v][whichBounds][1] = glm::mix(points[u + 1][v], points[u][v + 1], 0.5);
+				}
+		}
+	}
+
+	void
 	ComputeSlefes()
 	{
 		if (!slefesChanged)
@@ -372,9 +401,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		for (GLint patchIndex = 0; patchIndex < NumTeapotPatches; ++patchIndex)
 		{
-			REAL coeff[4][4][threeD];
-			for (GLuint u = 0; u < 4; ++u)
-				for (GLuint v = 0; v < 4; ++v)
+			REAL coeff[numCubicTerms][numCubicTerms][threeD];
+			for (GLuint u = 0; u < numCubicTerms; ++u)
+				for (GLuint v = 0; v < numCubicTerms; ++v)
 				{
 					const float *vertex = TeapotVertices[TeapotIndices[patchIndex][u][v]];
 					for (GLuint dim = 0; dim < threeD; ++dim)
@@ -397,6 +426,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 					slefe.bounds[Slefe::LOWER].points[u][v] = vec3(lower[u][v][0], lower[u][v][1], lower[u][v][2]);
 					slefe.bounds[Slefe::UPPER].points[u][v] = vec3(upper[u][v][0], upper[u][v][1], upper[u][v][2]);
 				}
+
+			ComputeSlefeMidPoints(slefe);
 		}
 
 		slefesChanged = false;
@@ -422,45 +453,50 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		{
 			bool patchOpen = (levelsOpen && ImGui::TreeNode((string("Patch ") + std::to_string(patchIndex)).c_str()));
 
-			const SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			auto &pointBoxes = pointSlefeBoxes[patchIndex];
+			auto &tileBoxes = tileSlefeBoxes[patchIndex];
 
-			float maxScreenEdge = 0;
+			float patchMaxScreenEdge = 0;
 
 			for (GLuint u = 0; u < numSlefeDivs; ++u)
 				for (GLuint v = 0; v < numSlefeDivs; ++v)
 				{
 					AABB tileBox = {vec3(INFINITY), vec3(-INFINITY)};
+					float tileMaxScreenEdge = tileBoxes[u][v].maxScreenEdge;
 
 					for (GLuint uOff = 0; uOff < 2; ++uOff)
 						for (GLuint vOff = 0; vOff < 2; ++vOff)
-							for (GLuint dim = 0; dim < threeD; ++dim)
-							{
-								tileBox.min[dim] = glm::min(slefeBoxes[u + uOff][v + vOff].screenAxisBox.min[dim],
-										tileBox.min[dim]);
-								tileBox.max[dim] = glm::max(slefeBoxes[u + uOff][v + vOff].screenAxisBox.max[dim],
-										tileBox.max[dim]);
-							}
+						{
+							tileBox.min = min(pointBoxes[u + uOff][v + vOff].screenAxisBox.min, tileBox.min);
+							tileBox.max = max(pointBoxes[u + uOff][v + vOff].screenAxisBox.max, tileBox.max);
+
+							tileMaxScreenEdge = max(tileMaxScreenEdge, pointBoxes[u + uOff][v + vOff].maxScreenEdge);
+						}
 
 					if (tileBox.min.x > screenWidth || tileBox.min.y > screenHeight || tileBox.min.z > 1 ||
 							tileBox.max.x < 0 || tileBox.max.y < 0 || tileBox.max.z < 0)
 						continue;
 
 					if (patchOpen)
-						ImGui::Text("Tile[%u][%u].maxScreenEdge = %.2f", u, v, slefeBoxes[u][v].maxScreenEdge);
+						ImGui::Text("Tile[%u][%u] maxScreenEdge = %.2f", u, v, tileMaxScreenEdge);
 
-					maxScreenEdge = glm::max(slefeBoxes[u][v].maxScreenEdge, maxScreenEdge);
+					patchMaxScreenEdge = max(tileMaxScreenEdge, patchMaxScreenEdge);
 				}
 
-			float tessLevel = numSlefeDivs * sqrt(maxScreenEdge);
+			static float mysteryFactor2 = 1.5;
+			static ImGuiOnceUponAFrame once;
+			if (showDebugWindow && once)
+				ImGui::DragFloat("Mystery factor 2", &mysteryFactor2, 0.01);
+
+			float tessLevel = numSlefeDivs * sqrtf(patchMaxScreenEdge / pixelAccuracy) * mysteryFactor2;
 			if (!fracTessLevels)
 				tessLevel = ceilf(tessLevel);
 
-			vertexTessLevels[TeapotIndices[patchIndex][0][2]] =
-					vertexTessLevels[TeapotIndices[patchIndex][2][3]] =
-					vertexTessLevels[TeapotIndices[patchIndex][3][1]] =
-					vertexTessLevels[TeapotIndices[patchIndex][1][0]] = tessLevel;
+			auto &levels = vertexTessLevels;
+			auto &indices = TeapotIndices[patchIndex];
 
-			vertexTessLevels[TeapotIndices[patchIndex][1][1]] = tessLevel;
+			levels[indices[0][2]] = levels[indices[2][3]] = levels[indices[3][1]] = levels[indices[1][0]] = tessLevel;
+			levels[indices[1][1]] = tessLevel;
 
 			if (patchOpen)
 			{
@@ -507,15 +543,15 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 					for (GLuint uOff = 0; uOff < 2; ++uOff)
 						for (GLuint vOff = 0; vOff < 2; ++vOff)
-							bcopy(slefeBoxVertices[patchIndex][udiv + uOff][vdiv + vOff],
-									tilePoints[uOff][vOff],
-									sizeof(slefeBoxVertices[patchIndex][udiv + uOff][vdiv + vOff]));
+							bcopy(pointBoxVertices[patchIndex][udiv + uOff][vdiv + vOff],
+							      tilePoints[uOff][vOff],
+							      sizeof(pointBoxVertices[patchIndex][udiv + uOff][vdiv + vOff]));
 
 					QuickHull quickHull;
 					auto tileMesh = quickHull.getConvexHullAsMesh(value_ptr(tilePoints[0][0][0]),
-							2 * 2 * 8,
-							true,
-							1e-7);
+					                                              2 * 2 * 8,
+					                                              true,
+					                                              1e-7);
 
 					// It's pretty wasteful not to just build indices into the slefe box vertex list, but this is just
 					// for debug display.
@@ -554,9 +590,9 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		slefeTilesChanged = false;
 	}
 
-    void
-    RenderSlefeTiles()
-    {
+	void
+	RenderSlefeTiles()
+	{
 		ComputeSlefeTiles();
 
 		bool patchesOpen = (showDebugWindow && ImGui::TreeNode("Patch slefes"));
@@ -578,10 +614,10 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 					{
 						if (showPatch)
 							ImGui::Text("%s[%u][%u]: %f, %f, %f",
-										(whichBound == Slefe::LOWER) ? "Lower" : "Upper", udiv, vdiv,
-										bounds.points[udiv][vdiv][0],
-										bounds.points[udiv][vdiv][1],
-										bounds.points[udiv][vdiv][2]);
+							            (whichBound == Slefe::LOWER) ? "Lower" : "Upper", udiv, vdiv,
+							            bounds.points[udiv][vdiv][0],
+							            bounds.points[udiv][vdiv][1],
+							            bounds.points[udiv][vdiv][2]);
 					}
 				}
 			}
@@ -595,13 +631,13 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		debugProgram.Use();
 
-        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
 
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER,
-				slefeTileVertices.size() * sizeof(slefeTileVertices[0]),
-				slefeTileVertices.data(),
-				GL_STREAM_DRAW);
+		             slefeTileVertices.size() * sizeof(slefeTileVertices[0]),
+		             slefeTileVertices.data(),
+		             GL_STREAM_DRAW);
 
 		Set3DCamera(debugProgram);
 
@@ -611,11 +647,17 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		GLuint start = patchSlefeTileIndices[patchRange[0]][0];
 		GLuint stop = patchSlefeTileIndices[patchRange[0] + patchRange[1] - 1][1];
 		RenderDebugPrimitives(GL_LINES, slefeTileColor, slefeTileIndices, start, stop - start);
-    }
+	}
 
 	void
 	GetAABBVertices(const AABB &box, vec3 vertices[8])
 	{
+#if 0
+		for (GLuint i = 0; i < 8; ++i)
+			vertices[i] = vec3((i & 1) ? box.min.x : box.max.x,
+			                   (i & 2) ? box.min.y : box.max.y,
+			                   (i & 4) ? box.min.z : box.max.z);
+#else
 		vertices[0] = box.min;
 		vertices[1] = vec3(box.min.x, box.min.y, box.max.z);
 		vertices[2] = vec3(box.min.x, box.max.y, box.max.z);
@@ -624,6 +666,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 		vertices[5] = vec3(box.max.x, box.min.y, box.max.z);
 		vertices[6] = box.max;
 		vertices[7] = vec3(box.max.x, box.max.y, box.min.z);
+#endif // 0
 	}
 
 	void
@@ -650,7 +693,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	DebugAABB(const char *name, GLuint u, GLuint v, const AABB &box)
 	{
 		ImGui::Text("%s[%u][%u]: { %.2f %.2f %.2f } - { %.2f %.2f %.2f }",
-				name, u, v, box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z);
+		            name, u, v, box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z);
 	}
 
 	void
@@ -668,24 +711,42 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 			if (slefeNodesOpen)
 				patchOpen = ImGui::TreeNode((string("Slefe box ") + std::to_string(patchIndex)).c_str());
 
-			const SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			auto &pointBoxes = pointSlefeBoxes[patchIndex];
+			auto &tileBoxes = tileSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					const SlefeBox &box = slefeBoxes[u][v];
+					const SlefeBox &pointBox = pointBoxes[u][v];
 
 					if (patchOpen)
 					{
-						DebugAABB("worldAxisBox", u, v, box.worldAxisBox);
-						DebugAABB("screenAxisBox", u, v, box.screenAxisBox);
+						DebugAABB("Point.worldAxisBox", u, v, pointBox.worldAxisBox);
+						DebugAABB("Point.screenAxisBox", u, v, pointBox.screenAxisBox);
 					}
 
 					if (showSlefeBoxes)
-						RenderAABBWireframe(box.worldAxisBox, boxVertices, boxIndices);
+						RenderAABBWireframe(pointBox.worldAxisBox, boxVertices, boxIndices);
 
 					if (showScreenRects)
-						RenderAABBWireframe(box.screenAxisBox, boxVertices, screenRectIndices);
+						RenderAABBWireframe(pointBox.screenAxisBox, boxVertices, screenRectIndices);
+
+					if (u < numSlefeDivs && v < numSlefeDivs)
+					{
+						auto &tileBox = tileBoxes[u][v];
+
+						if (patchOpen)
+						{
+							DebugAABB("Tile.worldAxisBox", u, v, tileBox.worldAxisBox);
+							DebugAABB("Tile.screenAxisBox", u, v, tileBox.screenAxisBox);
+						}
+
+						if (showSlefeBoxes)
+							RenderAABBWireframe(tileBox.worldAxisBox, boxVertices, boxIndices);
+
+						if (showScreenRects)
+							RenderAABBWireframe(tileBox.screenAxisBox, boxVertices, screenRectIndices);
+					}
 				}
 
 			if (patchOpen)
@@ -697,7 +758,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 
 		debugProgram.Use();
 
-		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_DEBUG]);
 
 		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_DEBUG_VERTICES]);
 		glBufferData(GL_ARRAY_BUFFER, boxVertices.size() * sizeof(boxVertices[0]), boxVertices.data(), GL_STREAM_DRAW);
@@ -753,35 +814,35 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	}
 
 public:
-    PixAccCurvedSurf() : GLFWWindowedApp("PixAccCurvedSurf")
-    {
-        glGenVertexArrays(NUM_VERTEX_ARRAYS, vertexArrayObjects);
-        glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
+	PixAccCurvedSurf() : GLFWWindowedApp("PixAccCurvedSurf")
+	{
+		glGenVertexArrays(NUM_VERTEX_ARRAYS, vertexArrayObjects);
+		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
-        glGenBuffers(NUM_BUFFERS, buffers);
+		glGenBuffers(NUM_BUFFERS, buffers);
 
-        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(TeapotVertices), TeapotVertices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(TeapotVertices), TeapotVertices, GL_STATIC_DRAW);
 
-        modelCentroid = vec3(0);
-        for (GLuint i = 0; i < NumTeapotVertices; ++i)
-            modelCentroid+= vec3(0/*TeapotVertices[i][0]*/, TeapotVertices[i][1], 0/*TeapotVertices[i][2]*/);
-        modelCentroid/= NumTeapotVertices;
+		modelCentroid = vec3(0);
+		for (GLuint i = 0; i < NumTeapotVertices; ++i)
+			modelCentroid+= vec3(0/*TeapotVertices[i][0]*/, TeapotVertices[i][1], 0/*TeapotVertices[i][2]*/);
+		modelCentroid/= NumTeapotVertices;
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(TeapotIndices), TeapotIndices, GL_STATIC_DRAW);
 
-        RebuildMainProgram();
+		RebuildMainProgram();
 
-        glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
+		glPatchParameteri(GL_PATCH_VERTICES, NumTeapotVerticesPerPatch);
 
-        debugProgram.LoadShader(GL_VERTEX_SHADER, "Debug.vert");
-        debugProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
+		debugProgram.LoadShader(GL_VERTEX_SHADER, "Debug.vert");
+		debugProgram.LoadShader(GL_FRAGMENT_SHADER, "UniformColor.frag");
 
 		debugProgram.Link();
 
-        setenv("SUBLIMEPATH", ".", false);
-        InitBounds();
+		setenv("SUBLIMEPATH", ".", false);
+		InitBounds();
 
 		glGetIntegerv(GL_SAMPLES, &numSampleBuffers);
 
@@ -794,8 +855,8 @@ public:
 
 		glGenQueries(NUM_QUERIES, queries);
 
-        CheckGLErrors("PixAccCurvedSurf()");
-    }
+		CheckGLErrors("PixAccCurvedSurf()");
+	}
 
 	~PixAccCurvedSurf()
 	{
@@ -817,28 +878,73 @@ public:
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
 			Slefe &slefe = slefes[patchIndex];
-			SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			auto &pointBoxes = pointSlefeBoxes[patchIndex];
+			auto &tileBoxes = tileSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					struct SlefeBox &box = slefeBoxes[u][v];
+					struct SlefeBox &pointBox = pointBoxes[u][v];
 
 					vec3 &lower = slefe.bounds[Slefe::LOWER].points[u][v];
 					vec3 &upper = slefe.bounds[Slefe::UPPER].points[u][v];
 
-					vec3 center = (lower + upper) / vec3(2.0);
-					vec3 halfSize = (upper - lower) / vec3(2.0);
+					pointBox.worldAxisBox.min = min(lower, upper);
+					pointBox.worldAxisBox.max = max(lower, upper);
 
-					box.worldAxisBox.min = center - halfSize;
-					box.worldAxisBox.max = center + halfSize;
+					GetAABBVertices(pointBox.worldAxisBox, pointBoxVertices[patchIndex][u][v]);
 
-					GetAABBVertices(box.worldAxisBox, slefeBoxVertices[patchIndex][u][v]);
+					if (u < numSlefeDivs && v < numSlefeDivs)
+					{
+						auto &tileBox = tileBoxes[u][v];
+
+						tileBox.worldAxisBox.min = vec3(INFINITY);
+						tileBox.worldAxisBox.max = vec3(-INFINITY);
+
+						for (GLuint mid = 0; mid < 2; ++mid)
+						{
+							auto &midPoints = slefe.midPoints[u][v][mid];
+
+							for (GLuint whichBounds = 0; whichBounds < Slefe::NUM_BOUNDS; ++whichBounds)
+							{
+								tileBox.worldAxisBox.max = max(tileBox.worldAxisBox.max, midPoints[whichBounds]);
+								tileBox.worldAxisBox.min = min(tileBox.worldAxisBox.min, midPoints[whichBounds]);
+							}
+						}
+
+						GetAABBVertices(tileBox.worldAxisBox, tileBoxVertices[patchIndex][u][v]);
+					}
 				}
 		}
 
 		slefeBoxesChanged = false;
 		slefeTilesChanged = true;
+	}
+
+	void
+	ComputeSlefeRect(SlefeBox &box, vec3 (&worldBoxVertices)[8], const vec3 &halfWindowSize)
+	{
+		vec3 &screenMin = box.screenAxisBox.min;
+		vec3 &screenMax = box.screenAxisBox.max;
+
+		screenMin = vec3(INFINITY);
+		screenMax = vec3(-INFINITY);
+
+		for (GLuint i = 0; i < 8; ++i)
+		{
+			vec4 worldVertex = vec4(worldBoxVertices[i], 1);
+			vec4 clipVertex = projectionMatrix * modelViewMatrix * worldVertex;
+			vec3 normVertex = vec3(clipVertex[0], clipVertex[1], clipVertex[2]) / vec3(clipVertex.w);
+			vec3 winVertex = halfWindowSize + normVertex * halfWindowSize;
+
+			for (GLuint dim = 0; dim < threeD; ++dim)
+			{
+				screenMin[dim] = min(screenMin[dim], winVertex[dim]);
+				screenMax[dim] = max(screenMax[dim], winVertex[dim]);
+			}
+		}
+
+		box.maxScreenEdge = max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
 	}
 
 	void
@@ -852,35 +958,16 @@ public:
 
 		for (GLint patchIndex = patchRange[0]; patchIndex < patchRange[0] + patchRange[1]; ++patchIndex)
 		{
-			SlefeBox (&slefeBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = patchSlefeBoxes[patchIndex];
+			SlefeBox (&pointBoxes)[maxSlefeDivs + 1][maxSlefeDivs + 1] = pointSlefeBoxes[patchIndex];
+			auto &tileBoxes = tileSlefeBoxes[patchIndex];
 
 			for (GLuint u = 0; u <= numSlefeDivs; ++u)
 				for (GLuint v = 0; v <= numSlefeDivs; ++v)
 				{
-					struct SlefeBox &box = slefeBoxes[u][v];
-					vec3 (&worldBoxVertices)[8] = slefeBoxVertices[patchIndex][u][v];
+					ComputeSlefeRect(pointBoxes[u][v], pointBoxVertices[patchIndex][u][v], halfWindowSize);
 
-					vec3 &screenMin = box.screenAxisBox.min;
-					vec3 &screenMax = box.screenAxisBox.max;
-
-					screenMin = vec3(INFINITY);
-					screenMax = vec3(-INFINITY);
-
-					for (GLuint i = 0; i < 8; ++i)
-					{
-						vec4 worldVertex = vec4(worldBoxVertices[i], 1);
-						vec4 clipVertex = projectionMatrix * modelViewMatrix * worldVertex;
-						vec3 normVertex = vec3(clipVertex[0], clipVertex[1], clipVertex[2]) / vec3(clipVertex.w);
-						vec3 winVertex = halfWindowSize + normVertex * halfWindowSize;
-
-						for (GLuint dim = 0; dim < threeD; ++dim)
-						{
-							screenMin[dim] = glm::min(screenMin[dim], winVertex[dim]);
-							screenMax[dim] = glm::max(screenMax[dim], winVertex[dim]);
-						}
-					}
-
-					box.maxScreenEdge = glm::max(screenMax.x - screenMin.x, screenMax.y - screenMin.y);
+					if (u < numSlefeDivs && v < numSlefeDivs)
+						ComputeSlefeRect(tileBoxes[u][v], tileBoxVertices[patchIndex][u][v], halfWindowSize);
 				}
 		}
 	}
@@ -890,8 +977,8 @@ public:
 	{
 		glBindVertexArray(vertexArrayObjects[VERTEX_ARRAY_TEAPOT]);
 
-        glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
+		glBindBuffer(GL_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINTS]);
+		//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[BUFFER_CONTROL_POINT_INDICES]);
 
 		mainProgram->Use();
 
@@ -948,8 +1035,8 @@ public:
 			for (GLuint i = 0; i < copies; ++i)
 			{
 				glDrawElements(GL_PATCHES,
-						NumTeapotVerticesPerPatch * patchRange[1],
-						GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+				               NumTeapotVerticesPerPatch * patchRange[1],
+				               GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 			}
 
 			if (showStatsCounters)
@@ -972,8 +1059,8 @@ public:
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 			glDrawElements(GL_PATCHES,
-					NumTeapotVerticesPerPatch * patchRange[1],
-					GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
+			               NumTeapotVerticesPerPatch * patchRange[1],
+			               GL_UNSIGNED_INT, (void *)(patchRange[0] * sizeof(TeapotIndices[0])));
 
 			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
@@ -995,7 +1082,7 @@ public:
 	RenderUI(double time)
 	{
 		ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-        ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
+		ImWindow gui("Controls", NULL, ImGuiWindowFlags_AlwaysAutoResize);
 
 		ImGui::Combo("Mode", &tessMode, "iPASS\0Uniform\0\0");
 		if (tessMode == TESS_IPASS)
@@ -1003,11 +1090,15 @@ public:
 			if (ImGui::CollapsingHeader("iPASS", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				static const GLuint step = 1;
-				if (ImGui::InputScalar("Divisions", ImGuiDataType_U32, &numSlefeDivs, &step))
+				if (ImGui::InputScalar("Divs.", ImGuiDataType_U32, &numSlefeDivs, &step))
 				{
 					numSlefeDivs = glm::clamp(numSlefeDivs, 2u, maxSlefeDivs);
 					slefesChanged = true;
 				}
+
+				if (ImGui::DragFloat("Pix acc.", &pixelAccuracy, 0.01, 0.01, 10.0))
+					pixelAccuracy = glm::clamp(pixelAccuracy, 0.01f, 10.0f);
+
 				ImGui::Checkbox("Fractional tessellation", &fracTessLevels);
 
 				ImGui::Checkbox("Show slefe boxes", &showSlefeBoxes);
@@ -1015,16 +1106,18 @@ public:
 				ImGui::Checkbox("Show slefe tiles", &showSlefeTiles);
 			}
 		}
+		else if (tessMode == TESS_UNIFORM)
+			ImGui::DragFloat("Level", &uniformLevel, 0.05, 1, 64, "%.1f");
 		else
-			ImGui::DragInt("Level", &uniformLevel, 0.2, 1, 100);
+			assert(!"Invalid tessMode");
 
 		if (ImGui::Checkbox("Show parametric error", &showError))
 			RebuildMainProgram();
 
 		static vec3 cameraOffset(0, 0, 5);
-        static float cameraParams[2] = {0, 30};
-        static bool perspective = true;
-        static float fov = 70;
+		static float cameraParams[2] = {0, 30};
+		static bool perspective = true;
+		static float fov = 70;
 
 		ImGuiIO &io = ImGui::GetIO();
 		if (!io.WantCaptureMouse)
@@ -1079,8 +1172,8 @@ public:
 		static bool animateDistance = false;
 		static AnimationCurve distanceCurve(2.4, 15.0, 0.5);
 
-        if (ImGui::CollapsingHeader("Camera"))
-        {
+		if (ImGui::CollapsingHeader("Camera"))
+		{
 			ImGui::Checkbox("Anim. dist.", &animateDistance);
 			ImGui::SameLine();
 			ImGui::Checkbox("Anim. azi.", &animateAzimuth);
@@ -1134,7 +1227,7 @@ public:
 		else
 			glDisable(GL_MULTISAMPLE);
 
-		if (ImGui::IsKeyPressed(GLFW_KEY_1, false))
+		if (!io.WantCaptureKeyboard && ImGui::IsKeyPressed(GLFW_KEY_1, false))
 			showWireframe = !showWireframe;
 
         static vec3 modelPos = vec3(0);
@@ -1267,9 +1360,11 @@ public:
 	    float vertexTessLevels[NumTeapotVertices];
 		if (tessMode == TESS_IPASS)
 			ComputeTessLevels(vertexTessLevels);
-		else
+		else if (tessMode == TESS_UNIFORM)
 			for (GLuint i = 0; i < NumTeapotVertices; ++i)
 				vertexTessLevels[i] = uniformLevel;
+		else
+			assert(!"Invalid tessMode");
 
 		RenderModel(vertexTessLevels);
 
