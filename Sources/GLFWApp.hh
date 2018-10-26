@@ -252,7 +252,7 @@ protected:
 	}
 
 public:
-	GLFWWindowedApp(const std::string &title, int width = 1024, int height = 768)
+	GLFWWindowedApp(const std::string &title, int width = 1280, int height = 720)
 			: window(glfwCreateWindow(width, height, title.c_str(), NULL, NULL), glfwDestroyWindow)
 	{
 		GLFWwindow *win = window.get();
