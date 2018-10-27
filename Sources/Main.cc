@@ -1100,7 +1100,7 @@ public:
 					slefesChanged = true;
 				}
 
-				if (ImGui::DragFloat("Pix acc.", &pixelAccuracy, 0.01, 0.01, 10.0))
+				if (ImGui::DragFloat("Pix acc.", &pixelAccuracy, 0.01, 0.01, 10.0, "%.2f pixels"))
 					pixelAccuracy = glm::clamp(pixelAccuracy, 0.01f, 10.0f);
 
 				if (ImGui::Checkbox("Fractional tessellation", &fracTessLevels))
