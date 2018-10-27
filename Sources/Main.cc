@@ -82,7 +82,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	mat4 modelViewMatrix;
 	mat4 projectionMatrix;
 	GLint numSampleBuffers;
-	bool useMultiSampling = true;
+	bool useMultiSampling;
 
 	// Tessellation
 	enum {TESS_IPASS, TESS_UNIFORM};
@@ -848,6 +848,7 @@ public:
 		InitBounds();
 
 		glGetIntegerv(GL_SAMPLES, &numSampleBuffers);
+		useMultiSampling = (numSampleBuffers > 1);
 
 		glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
 
