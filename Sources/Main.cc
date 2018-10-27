@@ -147,7 +147,7 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	float minTextureLOD = 0;
 	float maxTextureLOD = 4.5;
 	float shininess = 32;
-	int bezierPatchMethod = 1;
+	int bezierPatchMethod = 3;
 
 	// Debug
 	bool showStatsCounters = false;
