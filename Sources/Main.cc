@@ -172,10 +172,8 @@ class PixAccCurvedSurf : public GLFWWindowedApp
 	{
 		string preproc = std::string("#define METHOD ") + std::to_string(bezierPatchMethod) + '\n';
 
-		if (showError)
-			preproc+= "#define SHOW_ERROR 1\n";
-		else if (showNormals)
-			preproc+= "#define SHOW_NORMAL 1\n";
+		preproc+= string("#define SHOW_ERROR ") + std::to_string(showError) + '\n';
+		preproc+= string("#define SHOW_NORMAL ") + std::to_string(showNormals) + '\n';
 
 		if (fracTessLevels)
 			preproc+= "#define TESS_SPACING fractional_even_spacing\n";
