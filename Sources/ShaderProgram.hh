@@ -87,8 +87,40 @@ public:
         catch (std::runtime_error &error)
         {
 			std::clog << "Error while compiling shader " << path << ':' << std::endl;
-			std::clog << "<<<<<<<<<" << std::endl << source << std::endl << "<<<<<<<<<" << std::endl;
-            throw;
+
+			GLint sourceLength;
+			glGetShaderiv(shader, GL_SHADER_SOURCE_LENGTH, &sourceLength);
+
+			std::vector<GLchar> fullSource(sourceLength);
+			glGetShaderSource(shader, fullSource.size() * sizeof(fullSource[0]), NULL, fullSource.data());
+
+			std::clog << "<<<<<<<<<" << std::endl;
+
+			bool beginLine = true;
+			GLuint lineNum = 1;
+			for (GLchar ch : fullSource)
+			{
+				if (beginLine)
+				{
+					std::clog << lineNum << ' ';
+					beginLine = false;
+				}
+
+				if (ch == '\0')
+					break;
+				else if (ch == '\n')
+				{
+					++lineNum;
+					beginLine = true;
+					std::clog << std::endl;
+				}
+				else
+					std::clog << (char)ch;
+			}
+
+			std::clog << std::endl << "<<<<<<<<<" << std::endl;
+
+			throw;
         }
 
         glAttachShader(program, shader);
